@@ -1,0 +1,47 @@
+## simple iteration with next and previous
+
+function array:next {
+	local ArrayName=${1:?}
+	local IndexName="__${ArrayName}_Index"
+
+	eval "echo \${${ArrayName}[(( ${IndexName} = ${IndexName} % \${#${ArrayName}} + 1 )) ]}"
+}	
+function array:prev {
+	local ArrayName=${1:?}
+	local IndexName="__${ArrayName}_Index"
+
+	eval "echo \${${ArrayName}[(( ${IndexName} = ( ( ${IndexName} + \${#${ArrayName}} - 2 ) % \${#${ArrayName}} ) + 1 )) ]}"
+}
+
+
+## stateless simple iterator
+
+function array:statelessNext {
+  local EvalStr="${1}=( \$${1}[2,-1] \$${1}[1] )"
+  eval $EvalStr
+  echo ${(P)1[1]}
+}
+function array:statelessPrev {
+  local EvalStr="${1}=( \$${1}[-1] \$${1}[1,-2] )"
+  eval $EvalStr
+  echo ${(P)1[1]}
+}
+
+
+## iterate elements that match pattern - or that dont if (M) is not used
+
+function arr:next:pattern {          
+	Arr=( ${(P)1} )
+  Pat="${(P)2}"
+  Iname=" __${1}_I"
+
+  eval "echo \${Arr[\${(M)Arr[(in:(( ${Iname}+=1 )):)\${~Pat}]}]:-\$Arr[\${(M)Arr[(in:(( ${Iname}=1 )):)\${~Pat}]}]}" 
+}
+
+function arr:prev:pattern {          
+	Arr=( ${(P)1} )
+	Pat="${(P)2}"
+	Iname=" __${1}_I"
+
+	eval "echo \${Arr[\${(M)Arr[(in:(( ${Iname}-=1 )):)\${~Pat}]}]:-\$Arr[\${(M)Arr[(in:(( ${Iname}=${#Arr} )):)\${~Pat}]}]}"
+}
