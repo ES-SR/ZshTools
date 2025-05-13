@@ -35,4 +35,6 @@ function terminal:cursor:get:position {
 ~% }
 ~% testCurPosNoNewLine; testCurPosNoNewLine; echo
  # 1717
+~% clear; print -P - "%B%S${(%l:((COLUMNS/2))::-:: :r:((COLUMNS/2))::-:: :):-$(terminal:cursor:get:position)}%s%b" 
+ # ---------------------------------------------------------- 1 1 ---------------------------------------------------------
 
