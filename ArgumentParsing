@@ -1,0 +1,42 @@
+#!/bin/zsh
+
+
+## display output of a function when an argument matches a pattern
+
+function args:patternMatch:get:functionOutput {
+  <<< ${${(*M)@##${~PATTERN}}:+$(eval "${OUTPUT_FUNCTION}")}
+}
+
+# example
+PATTERN='((-|--)([hH](elp|))|((-|--|)([hH]elp)))'
+function testHelp {
+  cat<<-'EOF'
+    test help
+    output
+  EOF
+}
+OUTPUT_FUNCTION='testHelp'
+args:patternMatch:get:functionOutput -h two help 4 -H Help seven --help 9 --Help
+# test help output
+args:patternMatch:get:functionOutput 1 two 3 4 5 6 seven 8 9
+#
+
+
+## extract value following a " " (space) or "=" (equal sign) of argument matching a pattern
+
+function args:patternMatch:get:value {                                                                                                                                    | ut1 [22:01]
+  local Pattern="$PATTERN(=| )*"
+  <<< ${${(R)${(*M)"${*}"##${~Pattern}}##*(=| )}:-${DEFAULT_VALUE}} 
+}
+
+# example
+PATTERN='((-|--)([lL](og|))|((-|--|)([lL]og)))'
+DEFAULT_VALUE='/dev/null'
+args:patternMatch:get:value                                                                                                                                               | ut1 [22:02]
+# /dev/null
+args:patternMatch:get:value -l                                                                                                                                            | ut1 [22:02]
+# /dev/null
+args:patternMatch:get:value -l=dir/file                                                                                                                                   | ut1 [22:02]
+# dir/file
+args:patternMatch:get:value -l dir/file                                                                                                                                   | ut1 [22:02]
+# dir/file
