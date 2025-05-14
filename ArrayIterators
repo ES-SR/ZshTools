@@ -20,14 +20,47 @@ function array:prev {
 
 function array:statelessNext {
   local EvalStr="${1}=( \$${1}[2,-1] \$${1}[1] )"
-  eval $EvalStr
-  echo ${(P)1[1]}
+
+  #eval $EvalStr
+  #echo ${(P)1[1]}
+  echo $EvalStr
 }
 function array:statelessPrev {
   local EvalStr="${1}=( \$${1}[-1] \$${1}[1,-2] )"
-  eval $EvalStr
-  echo ${(P)1[1]}
+  
+  #eval $EvalStr
+  #echo ${(P)1[1]}
+  echo $EvalStr
 }
+
+# example utilizing print:linebreak:message:justify from Linebreaks
+Min=0; Max=$COLUMNS
+RunningMan=(
+        " 🯆 "
+        " 🯈  "
+        "_  🯅 "
+        " 🯇   ."
+        " 🯇   .."
+)
+RunningWoman=(
+        " 🯉 ..."
+        " 🯉 .."
+        " 🯉 ."
+        " 🯉 "
+)
+tput civis; tput sc
+for I ( {$Min..$(( Max  ))} ) {
+  local L=I; local R=$(( Max - L ))
+
+  tput rc ;tput ed
+  eval $(array:statelessNext RunningWoman;array:statelessNext RunningMan);
+  print:linebreak:message:justify "$RunningMan[1]$RunningWoman[1]"  $L,$R "_" "."
+  sleep .1
+}
+echo ""; tput cnorm
+
+
+
 
 
 ## iterate elements that match pattern - or that dont if (M) is not used
