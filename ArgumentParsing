@@ -1,5 +1,18 @@
 #!/bin/zsh
 
+## set a bool value based on if a argument matches a patter
+######
+
+function args:patternMatch:bool {
+  echo ${${@[(r)${~PATTERN}]:+true}:-false}
+}
+
+# example
+PATTERN='(-[vV]|(-|--|)[vV]erbose)'
+Verbose=$(args:patternMatch:bool some args here -V and more)
+${Verbose} && { exec 3>&1 } || { exec 3>/dev/null }
+
+
 
 ## display output of a function when an argument matches a pattern
 ######
