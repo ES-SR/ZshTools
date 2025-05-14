@@ -1,3 +1,5 @@
+#!/bin/zsh
+
 ## simple iteration with next and previous
 
 function array:next {
