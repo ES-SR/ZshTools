@@ -1,3 +1,5 @@
+#!/bin/zsh
+
 
 ## print a terminal width linebreak of given characters, defaults to "-" if no characters passed
 function print:linebreak {
