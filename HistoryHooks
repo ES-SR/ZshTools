@@ -1,0 +1,33 @@
+#!/bin/zsh
+
+## use separate history files based on cwd
+######
+
+## add this function to chpwd_functions array
+ # change HISTDIR to desired location to save history files
+function histFileToDirHist {
+  HISTDIR=${HISTDIR:-"/home/${USER}/Zsh.Mod/History.Zsh"}
+
+  if [[ -d ${HISTDIR:A} ]] {
+    fc -A
+    echo "Saved History"          
+
+    local Mesg="${HISTFILE:t} -> "        
+  
+    HISTFILE="${HISTDIR}/${$(pwd):t}.hist"
+
+    Mesg+="${HISTFILE:t}"                 
+    print -P - "%S%B ${Mesg} %s%b"
+  } else {
+    mkdir -p ${HISTDIR:A}
+    histFileToDirHist
+  }
+}
+
+## adding to the zsh hook
+ # only hook activated when changing dirs
+#declare -a chpwd_functions=( histFileToDirHist )
+ # last of the functions in the array to run
+#chpwd_functions+=( histFileToDirHist )
+ # first of the functions to run
+#chpwd_functions=( histFileToDirHist $chpwd_function )
