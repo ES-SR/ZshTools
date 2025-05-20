@@ -39,13 +39,13 @@ RunningMan=(
         " 🯆 "
         " 🯈  "
         "_  🯅 "
-        " 🯇   ."
+        "  🯇  ."
         " 🯇   .."
 )
 RunningWoman=(
         " 🯉 ..."
-        " 🯉 .."
         " 🯉 ."
+        " 🯉 .."
         " 🯉 "
 )
 tput civis; tput sc
