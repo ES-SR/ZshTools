@@ -1,0 +1,47 @@
+#!/bin/zsh
+##  AwkFiltersAndHighlighters
+###    Filtering and Highlighting using awk
+
+
+## Simple highlighting of word or pattern
+######
+
+# highlight [-f|-F|-filter|-Filter] <pattern>
+ # use awk style regex without the begining or ending "/". depending on regex feature used, pattern may need to be quoted
+ # simple standout highlighting of matches
+ # with the filter flag only show lines matching pattern
+function highlight {                                                             
+        local Filter=$( <<< ${(M)@##-(f|F)(ilter|)} )
+        Filter=${${Filter:+0}:-1}
+        awk -v F=${Filter} '      
+        {                                    
+                while( getline ) {                       
+                        if( $0 ~ /'${1}'/ ) {                                    
+                                gsub( /'${1}'/, "'${$(tput smso)}'&'${$(tput rmso)}'" )                             
+                                print $0
+                        } else if( F ) {   
+                                print $0
+                        }
+                }
+        }
+        '
+}
+
+
+## example 
+~% echo ${"${(@)$(man zshoptions)//_/}"} | highlight  "^[[:space:]]*[A-Z][A-Z]+ " -f
+# SPECIFYING OPTIONS
+# DESCRIPTION OF OPTIONS
+#        AUTOCD (-J)
+#               SHINSTDIN is set, i.e. if commands are being read from standard input.  The option is designed for interactive use; it is recommended that cd be used explicitly in scripts to avoid ambiguity.
+#        AUTOPUSHD (-N)
+#        CDABLEVARS (-T)
+#        CHASELINKS (-w)
+#        POSIXCD <K> <S>
+#        PUSHDSILENT (-E)
+#        PUSHDTOHOME (-D)
+#        ALWAYSLASTPROMPT <D>
+#        AUTOLIST (-9) <D>
+#        AUTOMENU <D>
+#        AUTOPARAMKEYS <D>
+# ...
