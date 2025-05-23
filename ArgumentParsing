@@ -1,8 +1,9 @@
 #!/bin/zsh
 
 
-  ## default argument-pattern builder
-  ######
+## default argument-pattern builder
+######
+
 function args:word2pattern {
   local Word="${(b)1:?}"
   local ShortFlag="(-|--)["$(<<< \
@@ -22,63 +23,69 @@ function args:word2pattern {
   echo "($ShortFlag)|($LongFlag)"
 }
 
-# example
-~% args:word2pattern local-port-more-hyphens
-# ((-|--)[Ll][Pp][Mm][Hh])|((-|--|)[Ll]ocal(-|)[Pp]ort(-|)[Mm]ore(-|)[Hh]yphens)
-~% ExampleArgs=( some localport args --Local-Port here -V and local-Port more -lpmh )
-~% print -l - ${(M)ExampleArgs##${~$(args:word2pattern local-port-more-hyphens)}}
-# -lpmh
+:<<-'EXAMPLE.word2pattern'
+  ~% args:word2pattern local-port-more-hyphens
+  ((-|--)[Ll][Pp][Mm][Hh])|((-|--|)[Ll]ocal(-|)[Pp]ort(-|)[Mm]ore(-|)[Hh]yphens)
+  ~% ExampleArgs=( some localport args --Local-Port here -V and local-Port more -lpmh )
+  ~% print -l - ${(M)ExampleArgs##${~$(args:word2pattern local-port-more-hyphens)}}
+  -lpmh
+EXAMPLE.word2pattern
 
 
-  ## set a bool value based on if a argument matches a patter
-  ######
+## set a bool value based on if a argument matches a patter
+######
+
 function args:patternMatch:bool {
   echo ${${@[(r)${~PATTERN}]:+true}:-false}
 }
 
-# example
-PATTERN='(-[vV]|(-|--|)[vV]erbose)'
-Verbose=$(args:patternMatch:bool some args here -V and more)
-${Verbose} && { exec 3>&1 } || { exec 3>/dev/null }
+:<<-'EXAMPLE.args:patternMatch:bool'
+  %~ PATTERN='(-[vV]|(-|--|)[vV]erbose)'
+  %~ Verbose=$(args:patternMatch:bool some args here -V and more)
+  %~${Verbose} && { exec 3>&1 } || { exec 3>/dev/null }
+EXAMPLE.args:patternMatch:bool
 
 
+## display output of a function when an argument matches a pattern
+######
 
-  ## display output of a function when an argument matches a pattern
-  ######
 function args:patternMatch:functionOutput {
   <<< ${${(*M)@##${~PATTERN}}:+$(eval "${OUTPUT_FUNCTION}")}
 }
 
-# example
-PATTERN='((-|--)([hH](elp|))|((-|--|)([hH]elp)))'
-function testHelp {
-  cat<<-'EOF'
-    test help
-    output
-EOF
-}
-OUTPUT_FUNCTION='testHelp'
-args:patternMatch:functionOutput -h two help 4 -H Help seven --help 9 --Help
-# test help output
-args:patternMatch:functionOutput 1 two 3 4 5 6 seven 8 9
-#
+:<<-'EXAMPLE.args:patternMatch:functionOutput'
+  %~ PATTERN='((-|--)([hH](elp|))|((-|--|)([hH]elp)))'
+  %~ function testHelp {
+  %~   cat<<-'EOF'
+  %~     test help
+  %~     output
+  %~   EOF
+  %~ }
+  %~ OUTPUT_FUNCTION='testHelp'
+  %~ args:patternMatch:functionOutput -h two help 4 -H Help seven --help 9 --Help
+  test help output
+  %~ args:patternMatch:functionOutput 1 two 3 4 5 6 seven 8 9
+
+EXAMPLE.args:patternMatch:functionOutput
 
 
-  ## extract value following a " " (space) or "=" (equal sign) of argument matching a pattern
-  ######
+## extract value following a " " (space) or "=" (equal sign) of argument matching a pattern
+######
+
 function args:patternMatch:value {                                                                                                                                    | ut1 [22:01]
   local Pattern="$PATTERN(=| )"
   <<< ${${(R)${(*M)"${*}"##${~Pattern}*}##*(=| )}:-${DEFAULT_VALUE}} 
 }
 
-# example
-PATTERN='((-|--)([lL](og|))|((-|--|)([lL]og)))'
-DEFAULT_VALUE='/dev/null'
-args:patternMatch:value                                                                                                                                               | ut1 [22:02]
-# /dev/null
-args:patternMatch:value -l                                                                                                                                            | ut1 [22:02]
-# /dev/null
-args:patternMatch:value -l=dir/file                                                                                                                                   | ut1 [22:02]
-# dir/file
-args:patternMatch:value -l dir/file                                                                                                                                   | ut1 [22:02]
-# dir/file
+:<<-'EXAMPLE.args:patternMatch:value'
+  %~ PATTERN='((-|--)([lL](og|))|((-|--|)([lL]og)))'
+  %~ DEFAULT_VALUE='/dev/null'
+  %~ args:patternMatch:value                                                                                                                                               | ut1 [22:02]
+  /dev/null
+  %~ args:patternMatch:value -l                                                                                                                                            | ut1 [22:02]
+  /dev/null
+  %~ args:patternMatch:value -l=dir/file                                                                                                                                   | ut1 [22:02]
+  dir/file
+  %~ args:patternMatch:value -l dir/file                                                                                                                                   | ut1 [22:02]
+  dir/file
+EXAMPLE.args:patternMatch:value
