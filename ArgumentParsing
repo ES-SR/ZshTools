@@ -74,20 +74,20 @@ EXAMPLE.args:patternMatch:functionOutput
 ## extract value following a " " (space) or "=" (equal sign) of argument matching a pattern
 ######
 
-function args:patternMatch:value {                                                                                                                                    | ut1 [22:01]
+function args:patternMatch:value {
   local Pattern="$PATTERN(=| )"
-  <<< ${${(R)${(*M)"${*}"##${~Pattern}*}##*(=| )}:-${DEFAULT_VALUE}} 
+  <<< ${${(R)${(*M)"${*}"##${~Pattern}*}##*(=| )}:-${DEFAULT_VALUE}}
 }
 
 :<<-'EXAMPLE.args:patternMatch:value'
   %~ PATTERN='((-|--)([lL](og|))|((-|--|)([lL]og)))'
   %~ DEFAULT_VALUE='/dev/null'
-  %~ args:patternMatch:value                                                                                                                                               | ut1 [22:02]
+  %~ args:patternMatch:value
   /dev/null
-  %~ args:patternMatch:value -l                                                                                                                                            | ut1 [22:02]
+  %~ args:patternMatch:value -l
   /dev/null
-  %~ args:patternMatch:value -l=dir/file                                                                                                                                   | ut1 [22:02]
+  %~ args:patternMatch:value -l=dir/file
   dir/file
-  %~ args:patternMatch:value -l dir/file                                                                                                                                   | ut1 [22:02]
+  %~ args:patternMatch:value -l dir/file
   dir/file
 EXAMPLE.args:patternMatch:value
