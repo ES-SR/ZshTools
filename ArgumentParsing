@@ -1,5 +1,86 @@
 #!/bin/zsh
 
+##########################################
+#####          Version 2 
+##########################################
+
+## pattern builder
+#
+function @args:word2pattern:v2 {
+        local Word="${(b)1:?}"
+
+        local ValueFlag=${${${(M)Word%=}:+true}:-false}
+        ( $ValueFlag ) && {
+                Word=${Word%=}
+                ValueFlag="[= ]* "
+                #print "true" 
+        } || {
+                #print "false"
+                ValueFlag=""
+        }
+
+        local ShortFlag="(--|-)["$(  \
+                <<<                            \
+                ${(j.][.)$(                    \
+                        for P ( ${(As.-.)Word} ) {
+                                <<<                                \
+                                ${(U)P[1]}${(L)P[1]}
+                        })}                              \
+        )"]"
+
+        local LongFlag="(--|-|)"$(  \
+                <<<                            \
+                ${(j.(-|).)$(                  \
+                        for P ( ${(As.-.)Word} ) {
+                                <<<                                \
+                                ${P//#[a-zA-Z0-9]/[${(U)P[1]}${(L)P[1]}]}
+                        })}                              \
+        )
+  
+        local PATTERN="((${ShortFlag})|(${LongFlag}))${ValueFlag}"
+        typeset -p PATTERN
+}
+
+:<<-"DOCS.word2pattern"
+  # the version from before is still used, as this example shows
+  <<| @args:word2pattern:v2 test-word
+  > typeset PATTERN='(((--|-)[Tt][Ww])|((--|-|)[Tt]est(-|)[Ww]ord))'
+  # now includes a version to make value extraction easier. just a a trailing "=" to the option name
+  <<| @args:word2pattern:v2 test-word-with-value=                       
+  > typeset PATTERN='(((--|-)[Tt][Ww][Ww][Vv])|((--|-|)[Tt]est(-|)[Ww]ord(-|)[Ww]ith(-|)[Vv]alue))[= ]* '
+[mike@tardis]/home/mike%   
+DOCS.word2pattern
+
+##  bool args
+# set flag words as boolean variables
+function @args:bool:v2 {
+        local Args=( ${(P)1:?} )
+        eval $(@args:word2pattern:v2 ${2:?})
+        local ${2}=${${${(M)Args##${~PATTERN}}:+true}:-false}
+        typeset -p ${2}
+}
+
+
+:<<-"EXAMPLE.USAGE"
+  <<| Targs=( first second third fourth )                               
+  <<| @args:bool:v2 Targs debug                                         
+  > typeset debug=false
+  <<| Targs=( first -debug second third fourth )
+  <<| @args:bool:v2 Targs debug                 
+  > typeset debug=true
+  <<| eval $(@args:bool:v2 Targs debug)                                 
+  <<| ( $debug ) && { print "do this" } || { print "do something else" }
+  > do this
+  <<| Targs=( first second third fourth )                               
+  <<| eval $(@args:bool:v2 Targs debug)                                 
+  <<| ( $debug ) && { print "do this" } || { print "do something else" }
+  > do something else
+EXAMPLE.USAGE
+
+
+
+
+
 
 ## default argument-pattern builder
 ######
