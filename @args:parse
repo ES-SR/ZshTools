@@ -1,0 +1,120 @@
+#!/bin/zsh
+
+## default argument-pattern builder
+######
+function @args:word2pattern {
+	local Word="${(b)1:?}"
+  local ShortFlag="(-|--)["$(  \
+  	<<<                            \
+  	${(j.][.)$(                    \
+			for P ( ${(As.-.)Word} ) {
+				<<<                                \
+				${(U)P[1]}${(L)P[1]}
+			}
+		)}                              \
+	)"]"
+  local LongFlag="(-|--|)"$(  \
+  	<<<                            \
+  	${(j.(-|).)$(                  \
+  		for P ( ${(As.-.)Word} ) {
+  			<<<                                \
+				${P//#[a-zA-Z0-9]/[${(U)P[1]}${(L)P[1]}]}
+			}
+		)}                              \
+  )
+
+	local PATTERN="($ShortFlag)|($LongFlag)"
+	typeset -p PATTERN
+}
+
+	:<<-'EXAMPLE.@args:word2pattern'
+  	~% @args:word2pattern local-port-more-hyphens
+		typeset PATTERN='((-|--)[Ll][Pp][Mm][Hh])|((-|--|)[Ll]ocal(-|)[Pp]ort(-|)[Mm]ore(-|)[Hh]yphens)'
+  	~% ExampleArgs=( some localport args --Local-Port here -V and local-Port more -lpmh )
+		~% eval $(@args:word2pattern local-port-more-hyphens)
+  	~% print -l - ${(M)ExampleArgs##${~PATTERN}}
+  	-lpmh
+	EXAMPLE.@args:word2pattern
+
+
+## set a bool value based on if a argument matches a patter
+######
+function @args:bool {                         
+	local Args=( ${(P)1:?} )	#copy of arguments to parse passed by name
+  local FlagName=${${2:?}//-/_}	#replace - with _ as - is not legal in variable names but common in flag names
+  eval $(@args:word2pattern $FlagName)	#set PATTERN to the pattern generated for FlagName
+  local ${FlagName}=${${${(M)Args##${~PATTERN}}:+true}:-false}	#create flagname var and set it to true or false
+  typeset -p ${FlagName}	#ouput for eval to create the variable with bool value based on matched or not
+  unset PATTERN	#dont pollute the namespace 
+	#TODO:update to check for pattern and use instead of creating default. 
+	#the updated arg parse functions unset pattern, so if it exists then it was set by the user and the
+	#custom pattern should be used rather than building and using default still should unset pattern
+}
+
+
+		:<<-'EXAMPLE.@args:bool'
+			<<| ExampleArgs=( some localport args --Local-Port here -V and local-Port more -lpmh )
+			<<| @args:bool ExampleArgs verbose                                                    
+			> typeset verbose=true
+			<<| ($verbose) \                                                                   
+			<<| 	&& {
+      <<|			echo "do this if verbose=true"
+			<<| 	} || {
+      <<| 		echo "do this if verbose=false"
+			<<|		}
+			> do this if verbose=true
+			<<| ExampleArgs=( some localport args --Local-Port here and local-Port more -lpmh ) #remove -V
+			<<| eval $(@args:bool ExampleArgs verbose)
+			<<| ($verbose) \                                                                   
+			<<| 	&& {
+      <<|			echo "do this if verbose=true"
+			<<| 	} || {
+      <<| 		echo "do this if verbose=false"
+			<<|		}
+			> do this if verbose=false
+		EXAMPLE.@args:bool
+
+
+## display output of a function when an argument matches a pattern
+######
+
+function args:patternMatch:functionOutput {
+  <<< ${${(*M)@##${~PATTERN}}:+$(eval "${OUTPUT_FUNCTION}")}
+}
+
+:<<-'EXAMPLE.args:patternMatch:functionOutput'
+  %~ PATTERN='((-|--)([hH](elp|))|((-|--|)([hH]elp)))'
+  %~ function testHelp {
+  %~   cat<<-'EOF'
+  %~     test help
+  %~     output
+  %~   EOF
+  %~ }
+  %~ OUTPUT_FUNCTION='testHelp'
+  %~ args:patternMatch:functionOutput -h two help 4 -H Help seven --help 9 --Help
+  test help output
+  %~ args:patternMatch:functionOutput 1 two 3 4 5 6 seven 8 9
+
+EXAMPLE.args:patternMatch:functionOutput
+
+
+## extract value following a " " (space) or "=" (equal sign) of argument matching a pattern
+######
+
+function args:patternMatch:value {
+  local Pattern="$PATTERN(=| )"
+  <<< ${${(R)${(*M)"${*}"##${~Pattern}*}##*(=| )}:-${DEFAULT_VALUE}}
+}
+
+:<<-'EXAMPLE.args:patternMatch:value'
+  %~ PATTERN='((-|--)([lL](og|))|((-|--|)([lL]og)))'
+  %~ DEFAULT_VALUE='/dev/null'
+  %~ args:patternMatch:value
+  /dev/null
+  %~ args:patternMatch:value -l
+  /dev/null
+  %~ args:patternMatch:value -l=dir/file
+  dir/file
+  %~ args:patternMatch:value -l dir/file
+  dir/file
+EXAMPLE.args:patternMatch:value
