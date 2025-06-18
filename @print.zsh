@@ -2,7 +2,7 @@
 
 
 ## print a terminal width linebreak of given characters, defaults to "-" if no characters passed
-function print:linebreak {
+function @print:linebreak {
 	local Chars=${1:-"-"}
   
 	local LineBreak=$(printf "echo \${(l:\$(tput cols)::%s:)\$(echo %s)}" $Chars)
@@ -14,7 +14,7 @@ function print:linebreak {
 
 ## print a terminal width linebreak with a centered message
 
-function print:linebreak:message {
+function @print:messageBreak {
 	local Message=${1}
 	local Chars=${2:-"-"}
 	local -i HalfWidth=$(( $(tput cols) / 2 ))
@@ -40,7 +40,7 @@ function print:linebreak:message {
  # can pass left side fill characters and right side fill characters
  # right side chars default to the left side chars if not passed
  # left side chars defualt to "-" if not passed ( right side will also be "-" )
-function print:linebreak:message:justify {
+function @print:messageBreak:justify {
 	local Text="${1}"
 	local -a Ratio=( ${(s:,:)2:-"1,1,"} )
 	local LeftFillChars=${3:-"-"}
