@@ -23,7 +23,7 @@ function @args:word2pattern {
 		)}                              \
 	)
 
-	local PATTERN="($ShortFlag)|($LongFlag)"
+	local PATTERN="($LongFlag)|($ShortFlag)"
 	typeset -p PATTERN
 }
 
@@ -125,17 +125,17 @@ function args:patternMatch:functionOutput {
 }
 
 :<<-'EXAMPLE.args:patternMatch:functionOutput'
-  %~ PATTERN='((-|--)([hH](elp|))|((-|--|)([hH]elp)))'
-  %~ function testHelp {
-  %~   cat<<-'EOF'
-  %~     test help
-  %~     output
-  %~   EOF
-  %~ }
-  %~ OUTPUT_FUNCTION='testHelp'
-  %~ args:patternMatch:functionOutput -h two help 4 -H Help seven --help 9 --Help
-  test help output
-  %~ args:patternMatch:functionOutput 1 two 3 4 5 6 seven 8 9
-
+	<< PATTERN='((-|--)([hH](elp|))|((-|--|)([hH]elp)))'
+	<< function testHelp {
+  <<   cat<<-'EOF'
+  <<     test help
+  <<     output
+  <<   EOF
+  << }
+  << OUTPUT_FUNCTION='testHelp'
+  << args:patternMatch:functionOutput -h two help 4 -H Help seven --help 9 --Help
+  > test help output
+  << args:patternMatch:functionOutput 1 two 3 4 5 6 seven 8 9
+	>
 EXAMPLE.args:patternMatch:functionOutput
 
