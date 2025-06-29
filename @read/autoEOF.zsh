@@ -10,7 +10,7 @@ function __@read:autoEOF {
 	local TIMEOUT=${2:-1}
 	local DELAY=${3:-0}
 	local LINE CNT
-	while [[ ${${${LINE::="$(IFS= read -rse)"}:+$CNT}:-$((CNT++))} -lt ${MAX_BLANK} ]] {
+	while [[ ${${${LINE::="$(IFS= read -t${TIMEOUT} -rse)"}:+$CNT}:-$((CNT++))} -lt ${MAX_BLANK} ]] {
 		if [[ -n $LINE ]] {
 			while [[ $CNT -gt 0 ]] {
 				echo ""
