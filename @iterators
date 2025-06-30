@@ -1,67 +1,140 @@
 #!/bin/zsh
+##  @iterators.zsh
 
-## simple iteration with next and previous
 
-function array:next {
+function __@iterators:arrays:initialize:Iterator_Indices {
+	(( ${+Iterator_Indices} )) || {
+		declare -HgAx Iterator_Indices         
+	}                                                       
+}
+
+function @iterators:arrays:next {
 	local ArrayName=${1:?}
-	local IndexName="__${ArrayName}_Index"
+	__@iterators:arrays:initialize:Iterator_Indices
+	# Use the global Iterator_Indices for this array's index
+	# Increment index, wrapping around to 1 if it exceeds array length
+	print -P - ${${(P)ArrayName}[(( \
+		Iterator_Indices[ArrayName] = \
+			Iterator_Indices[ArrayName] + 1 > ${#${(P)ArrayName}} \
+			? 1 \
+			: Iterator_Indices[ArrayName] + 1 \
+	))]}
+}
 
-	eval "echo \${${ArrayName}[(( ${IndexName} = ${IndexName} % \${#${ArrayName}} + 1 )) ]}"
-}	
-function array:prev {
+function @iterators:arrays:previous {
 	local ArrayName=${1:?}
-	local IndexName="__${ArrayName}_Index"
-
-	eval "echo \${${ArrayName}[(( ${IndexName} = ( ( ${IndexName} + \${#${ArrayName}} - 2 ) % \${#${ArrayName}} ) + 1 )) ]}"
+	__@iterators:arrays:initialize:Iterator_Indices
+	# Use the global Iterator_Indices for this array's index
+	# Decrement index, wrapping around to array length if it goes below 1
+	print -P - ${${(P)ArrayName}[(( \
+		Iterator_Indices[ArrayName] = \
+			Iterator_Indices[ArrayName] - 1 < 1 \
+			? ${#${(P)ArrayName}} \
+			: Iterator_Indices[ArrayName] - 1 \
+	))]}
 }
 
 
-## stateless simple iterator
+:<<-"DEPRECATED.array:[next,prev].RENAMED.@iterators:arrays:[next,previous]"
+	updated and renamed. uses global indices store
+	uses new naming convention
+	ready for planned use in @args:parse
+	
+	function array:next {
+		local ArrayName=${1:?}
+		local IndexName="__${ArrayName}_Index"
+	
+		eval "echo \${${ArrayName}[(( ${IndexName} = ${IndexName} % \${#${ArrayName}} + 1 )) ]}"
+	}
 
-function array:statelessNext {
-  local EvalStr="${1}=( \$${1}[2,-1] \$${1}[1] )"
+	function array:prev {
+		local ArrayName=${1:?}
+		local IndexName="__${ArrayName}_Index"
+	
+		eval "echo \${${ArrayName}[(( ${IndexName} = ( ( ${IndexName} + \${#${ArrayName}} - 2 ) % \${#${ArrayName}} ) + 1 )) ]}"
+	}
+DEPRECATED.array:[next,prev].RENAMED.@iterators:arrays:[next,previous]
 
-  #eval $EvalStr
-  #echo ${(P)1[1]}
-  echo $EvalStr
+
+function @iterators:arrays:cycle:forward {
+	local ArrayName=${1:?}
+	local -a Array=( ${(P)ArrayName} )
+
+	eval "${ArrayName}=( $Array[2,-1] $Array[1] )"
+	#print -P - ${${(P)ArrayName}[1]
 }
-function array:statelessPrev {
-  local EvalStr="${1}=( \$${1}[-1] \$${1}[1,-2] )"
-  
-  #eval $EvalStr
-  #echo ${(P)1[1]}
-  echo $EvalStr
+
+function @iterators:arrays:cycle:backward {
+	local ArrayName=${1:?}
+	local -a Array=( ${(P)ArrayName} )
+
+	eval "${ArrayName}=( $Array[-1] $Array[1,-2] )"
+	#print -P - ${${(P)ArrayName}[1]}
 }
 
-# example utilizing print:linebreak:message:justify from Linebreaks
-Min=0; Max=$COLUMNS
-RunningMan=(
-        " 🯆 "
-        " 🯈  "
-        "_  🯅 "
-        "  🯇  ."
-        " 🯇   .."
-)
-RunningWoman=(
-        " 🯉 ..."
-        " 🯉 ."
-        " 🯉 .."
-        " 🯉 "
-)
-tput civis; tput sc
-for I ( {$Min..$(( Max  ))} ) {
-  local L=I; local R=$(( Max - L ))
 
-  tput rc ;tput ed
-  eval $(array:statelessNext RunningWoman;array:statelessNext RunningMan);
-  print:linebreak:message:justify "$RunningMan[1]$RunningWoman[1]"  $L,$R "_" "."
-  sleep .1
+:<<-"DEPRECATED.array:stateless[Next,Prev].RENAMED.@iterators:arrays:cycle:[forward,backward]"
+	updated and renamed
+	uses new naming convention
+	ready for planned use in @args:parse
+	
+	function array:statelessNext {
+		local EvalStr="${1}=( \$${1}[2,-1] \$${1}[1] )"
+	
+		#eval $EvalStr
+		#echo ${(P)1[1]}
+		echo $EvalStr
+	}
+	
+	function array:statelessPrev {
+		local EvalStr="${1}=( \$${1}[-1] \$${1}[1,-2] )"
+	
+		#eval $EvalStr
+		#echo ${(P)1[1]}
+		echo $EvalStr
+	}
+
+	Example using these deprecated versions:
+		# example utilizing print:linebreak:message:justify from Linebreaks
+		Min=0; Max=$COLUMNS
+		RunningMan=(
+			" 🯆 "
+			" 🯈  "
+			"_  🯅 "
+			"  🯇  ."
+			" 🯇   .."
+		)
+		RunningWoman=(
+			" 🯉 ..."
+			" 🯉 ."
+			" 🯉 .."
+			" 🯉 "
+		)
+		tput civis; tput sc
+		for I ( {$Min..$(( Max  ))} ) {
+			local L=I; local R=$(( Max - L ))
+		
+			tput rc ;tput ed
+			eval $(array:statelessNext RunningWoman;array:statelessNext RunningMan);
+			print:linebreak:message:justify "$RunningMan[1]$RunningWoman[1]"  $L,$R "_" "."
+			sleep .1
+		}
+		echo ""; tput cnorm
+DEPRECATED.array:stateless[Next,Prev].RENAMED.@iterators:arrays:cycle:[forward,backward]
+
+
+function @iterators:arrays:asIterator {
+	local ArrayName=${1:?}
+	alias "${ArrayName}:next"="@iterators:arrays:next ${ArrayName}"
+	alias "${ArrayName}:previous"="@iterators:arrays:previous ${ArrayName}"
+	alias "${ArrayName}:cycle:forward"="@iterators:arrays:cycle:forward ${ArrayName}"
+	alias "${ArrayName}:cycle:backward"="@iterators:arrays:cycle:backward ${ArrayName}"
 }
-echo ""; tput cnorm
 
 
-
-
+#####################################################################################
+###									Finsh updating the functions past this point									###
+#####################################################################################
 
 ## iterate elements that match pattern - or that dont if (M) is not used
 
