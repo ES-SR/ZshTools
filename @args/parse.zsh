@@ -1,4 +1,5 @@
 #!/bin/zsh
+##  parse.zsh
 
 ## default argument-pattern builder
 ######
