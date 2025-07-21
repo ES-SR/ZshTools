@@ -1,5 +1,6 @@
 #!/bin/zsh
 
+######## Not the correct version. Does not work #########
 
 ## get the cursor position
  # => line column
