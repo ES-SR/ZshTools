@@ -3,40 +3,100 @@
 
 ## default argument-pattern builder
 ######
-function @args:word2pattern {
-	local Word="${(b)1:?}"
-	local ShortFlag="(-|--)["$(  \
-		<<<                            \
-		${(j.][.)$(                    \
+function @args:parse:gerneratePattern {
+	local Word="${(b)1:?}"                      
+	local ShortFlag="(-|--)["$(  \            
+		<<< ${(j.(-|).)$(               
 			for P ( ${(As.-.)Word} ) {
-				<<<                                \
-				${(U)P[1]}${(L)P[1]}
+				<<< "(#i)${P[1]}" \
 			}
-		)}                              \
-	)"]"
+		)} \                            
+	)"]"              
 	local LongFlag="(-|--|)"$(  \
-		<<<                            \
-		${(j.(-|).)$(                  \
+		<<< ${(j.(-|).)$(                  \
 			for P ( ${(As.-.)Word} ) {
-				<<<                                \
-				${P//#[a-zA-Z0-9]/[${(U)P[1]}${(L)P[1]}]}
+				<<< "(#i)${P}" \
 			}
-		)}                              \
-	)
-
+		)} \       
+	)            
+    
 	local PATTERN="($LongFlag)|($ShortFlag)"
-	typeset -p PATTERN
+	print -- $PATTERN                                               
 }
 
-	:<<-'EXAMPLE.@args:word2pattern'
-		~% @args:word2pattern local-port-more-hyphens
-		> typeset PATTERN='((-|--)[Ll][Pp][Mm][Hh])|((-|--|)[Ll]ocal(-|)[Pp]ort(-|)[Mm]ore(-|)[Hh]yphens)'
-		~% ExampleArgs=( some localport args --Local-Port here -V and local-Port more -lpmh )
-		~% eval $(@args:word2pattern local-port-more-hyphens)
-		~% print -l - ${(M)ExampleArgs##${~PATTERN}}
-		> -lpmh
-	EXAMPLE.@args:word2pattern
+### Initial combined parsing function -- no value extraction yet
+function __@args:parse_v1 {     
+	declare -a Args=( "${(z@)1}" )        
+	declare -a FlagNames=( ${(b)@[2,-1]} )
+  
+	for FN ( ${FlagNames} ) {                                   
+		local -a Match=()
+		local -i C=0              
+		while (( $C <= $#Args )) {                                        
+			Match+=(
+				${(*Aw)Args[(wn.((C+=1)).r)$(@args:parse:gerneratePattern $FN)]} )
+			}
+			# method 1
+			eval "${FN}=( ${Match} )"
+			typeset -p $FN
+		}
+		# method 2
+		#print -l -- ${${FlagNames}//(#m)(*)/${MATCH}:${(P)MATCH}}
 
+		# updating script args
+		declare -a MatchedArgs=( ${(z)${FlagNames}//(#m)(*)/${(P)MATCH}} )
+		declare -a CleanedArgs=( ${Args:|MatchedArgs} )
+		print -- "argv=( $CleanedArgs )"
+}
+alias @args:parse_v1="__@args:parse_v1 \"\${argv}\""
+
+:<<-"EXAMPLE.__@args:parse_v1"
+	function @test:argParseUse {
+		@print:pel:cascade Before
+		print -l -- "$@" | bat -n
+		eval "$(@args:parse_v1 Verbose)"
+		@print:pel:cascade After
+		print -l -- "$@" | bat -n
+	}
+	@test:argParseUse -a --list --A no-match List Verbose add
+	
+	function @test:argParseUse {
+		@print:pel:cascade Before
+		print -l -- "$@" | bat -n
+		eval "$(@args:parse_v1 List ADD)"
+		@print:pel:cascade After
+		print -l -- "$@" | bat -n
+	}
+	@test:argParseUse -a --list --A no-match List Verbose add
+	
+	............................................. Before .............................................
+		1 -a
+		2 --list
+		3 --A
+		4 no-match
+		5 List
+		6 Verbose
+		7 add
+	.............................................. After .............................................
+		1 -a
+		2 --list
+		3 --A
+		4 no-match
+		5 List
+		6 add
+	............................................. Before .............................................
+		1 -a
+		2 --list
+		3 --A
+		4 no-match
+		5 List
+		6 Verbose
+		7 add
+	.............................................. After .............................................
+		1 -a
+		2 no-match
+		3 Verbose
+EXAMPLE.__@args:parse_v1
 
 ## set a bool value based on if a argument matches a patter
 ######
