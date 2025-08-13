@@ -86,15 +86,18 @@ function __@args:parse {
 			Arrays=( ${Arrays[2,-1]} )
 		}
 	}
+	local -A Counts
 	for A ( ${Arrays} ) {
 		: ${(A)Arr::=${(z)A}}
 		local MaxVal=${${${(A)${(s.:.)Specs_Str[${Arr[1]}]}}[3]//'*'/$(( $#Arr - 1 ))}:-$(( -1 ))}
 		(( MaxVal = MaxVal + 1 < $#Arr ? MaxVal + 1 : $#Arr ))
 		local FlagArrName="${Arr[1]}"
-		local Elements=( ${${Arr[2,$(( MaxVal ))]}:-$(( Arr[1]+=1 ))} )
-		printf "%s=( %s )\n" "${FlagArrName}" "${Elements}"
-		local Remove=( $FlagArrName ${Elements} )
+		local Elements=( ${Arr[2,$(( MaxVal ))]} )
+		Counts[$FlagArrName]+=1
+		local Count=${Counts[${FlagArrName}]}
+		local Remove=( ${FlagArrName} ${Elements} )
 		argv+=( ${Arr:|Remove} )
+		printf "%s=( %s )\n" "${FlagArrName}" "${${Elements}:-${Count}}"
 	}
 	typeset -p argv
 }
@@ -103,23 +106,34 @@ alias @args:parse="__@args:parse \"\${argv}\""
 
 
 :<<-"Testing.Code"
-	% unset TestArgs;
-	  TestArgs=(  -V value -d 1 2 log.file  --verbose )
-	  __@args:parse "${TestArgs}"
-	  __@args:parse "${TestArgs}" verbose
-	  __@args:parse "${TestArgs}" verbose debug
-	  __@args:parse "${TestArgs}" +-V(alue|)+value=1 verbose debug=3
-	>> typeset -a argv=( -V value -d 1 2 log.file --verbose )
-	>> verbose=( 1 )
-	>> typeset -a argv=( -V value -d 1 2 log.file )
-	>> debug=( 1 )
-	>> verbose=( 1 )
-	>> typeset -a argv=( -V value 2 log.file )
-	>> value=( value )
-	>> debug=( 1 2 log.file )
-	>> verbose=( 1 )
-	>> typeset -a argv=(  )
-	% 
+	% #functions -T __@args:parse
+		unset TestArgs;
+		TestArgs=(  -V value -d 1 2 log.file  --verbose )
+		@print:pel:cascade " No Specs "
+		__@args:parse "${TestArgs}"
+
+		@print:pel:cascade " verbose "
+		__@args:parse "${TestArgs}" verbose
+
+		@print:pel:cascade " verbose debug "
+		__@args:parse "${TestArgs}" verbose debug
+
+		@print:pel:cascade " +-V(alue|)+value=1 verbose debug=3 "
+		__@args:parse "${TestArgs}" +-V(alue|)+value=1 verbose debug=3
+	> ...............................................  No Specs  ...............................................
+	> typeset -a argv=( -V value -d 1 2 log.file --verbose )
+	> ................................................  verbose  ...............................................
+	> verbose=( 1 )
+	> typeset -a argv=( -V value -d 1 2 log.file )
+	> .............................................  verbose debug  ............................................
+	> debug=( 1 )
+	> verbose=( 1 )
+	> typeset -a argv=( -V value 1 2 log.file )
+	> ................................ +- +-V(alue|)+value=1 verbose debug=3  +-................................
+	> value=( value )
+	> debug=( 1 2 log.file )
+	> verbose=( 1 )
+	> typeset -a argv=(  )
 Testing.Code
 
 
