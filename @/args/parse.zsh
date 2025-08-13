@@ -1,7 +1,6 @@
 #!/bin/zsh
 ##  @args:parse
 
-
 function __@tree:unpack:toArray {
         local AAName=${1:?}
         local Key=${2:?}
@@ -21,6 +20,37 @@ function @tree:new {
                         }"
         }
 }
+function __@iterators:arrays:initialize:Iterator_Indices {
+        (( ${+Iterator_Indices} )) || {
+                declare -HgAx Iterator_Indices
+        }
+}
+
+function @iterators:arrays:next {
+        local ArrayName=${1:?}
+        __@iterators:arrays:initialize:Iterator_Indices
+        # Use the global Iterator_Indices for this array's index
+        # Increment index, wrapping around to 1 if it exceeds array length
+        print -P - ${${(P)ArrayName}[(( \
+                Iterator_Indices[ArrayName] = \
+                        Iterator_Indices[ArrayName] + 1 > ${#${(P)ArrayName}} \
+                        ? 1 \
+                        : Iterator_Indices[ArrayName] + 1 \
+        ))]}
+}
+
+function @iterators:arrays:previous {
+        local ArrayName=${1:?}
+        __@iterators:arrays:initialize:Iterator_Indices
+        # Use the global Iterator_Indices for this array's index
+        # Decrement index, wrapping around to array length if it goes below 1
+        print -P - ${${(P)ArrayName}[(( \
+                Iterator_Indices[ArrayName] = \
+                        Iterator_Indices[ArrayName] - 1 < 1 \
+                        ? ${#${(P)ArrayName}} \
+                        : Iterator_Indices[ArrayName] - 1 \
+        ))]}
+}
 
 function @args:parse:generatePattern {
         local FlagName="${${1:?}//-/_}"
@@ -39,6 +69,30 @@ function @args:parse:generatePattern {
         local FullPattern="(#i)${LongPattern}${ShortPattern}"
 
         print - $FullPattern
+}
+
+function @iterators:arrays:cycle:forward {
+        local ArrayName=${1:?}
+        local -a Array=( ${(P)ArrayName} )
+
+        eval "${ArrayName}=( $Array[2,-1] $Array[1] )"
+        #print -P - ${${(P)ArrayName}[1]
+}
+
+function @iterators:arrays:cycle:backward {
+        local ArrayName=${1:?}
+        local -a Array=( ${(P)ArrayName} )
+
+        eval "${ArrayName}=( $Array[-1] $Array[1,-2] )"
+        #print -P - ${${(P)ArrayName}[1]}
+}
+
+function @iterators:arrays:asIterator {
+        local ArrayName=${1:?}
+        alias "${ArrayName}:next"="@iterators:arrays:next ${ArrayName}"
+        alias "${ArrayName}:previous"="@iterators:arrays:previous ${ArrayName}"
+        alias "${ArrayName}:cycle:forward"="@iterators:arrays:cycle:forward ${ArrayName}"
+        alias "${ArrayName}:cycle:backward"="@iterators:arrays:cycle:backward ${ArrayName}"
 }
 
 function @args:parse:flagspecs {
@@ -112,13 +166,16 @@ function __@args:parse {
         for F ( ${FlagArrayNames} ) {
                 typeset -p ${F}
                 print ";"
+                @iterators:arrays:asIterator ${F}
         }
         typeset -p argv
 }
-alias @args:parse="__@args:parse \"\${argv}\""
+alias @args:parse="() { eval \$( __@args:parse \"\${argv}\" \"\$@\" ) } "
+
+
 
 :<<-"Test.Output"
-	% #functions -T __@args:parse
+	%
 		unset TestArgs;
 		TestArgs=(  -V value -d 1 2 log.file Debug  --verbose )
 		@print:pel:cascade " No Specs "
@@ -132,20 +189,19 @@ alias @args:parse="__@args:parse \"\${argv}\""
 
 		@print:pel:cascade " +-V(alue|)+value=1 verbose debug=3 "
 		__@args:parse "${TestArgs}" +-V(alue|)+value=1 verbose debug=3
-	>>
-		.......................................................  No Specs  .......................................................
+	>>	......................................................................................................................................................................  No Specs  ......................................................................................................................................................................
 		typeset -a argv=( -V value -d 1 2 log.file Debug --verbose )
-		........................................................  verbose  .......................................................
+		.......................................................................................................................................................................  verbose  ......................................................................................................................................................................
 		typeset -g -a verbose=( 1 )
 		;
 		typeset -a argv=( -V value -d 1 2 log.file Debug )
-		.....................................................  verbose debug  ....................................................
+		....................................................................................................................................................................  verbose debug  ...................................................................................................................................................................
 		typeset -g -a debug=( 2 )
 		;
 		typeset -g -a verbose=( 1 )
 		;
 		typeset -a argv=( -V value 1 2 log.file )
-		........................................ +- +-V(alue|)+value=1 verbose debug=3  +-........................................
+		....................................................................................................................................................... +- +-V(alue|)+value=1 verbose debug=3  +-.......................................................................................................................................................
 		typeset -g -a value=( value )
 		;
 		typeset -g -a debug=( 1 2 log.file )
@@ -153,5 +209,19 @@ alias @args:parse="__@args:parse \"\${argv}\""
 		typeset -g -a verbose=( 1 )
 		;
 		typeset -a argv=(  )
+	%	verbose:next
+	>>	1
+	%	verbose:next
+	>>	1
+	%	debug:next
+	>>	2
+	%	debug:next
+	>>	log.file
+	%	debug:next
+	>>	1
+	%	debug:next
+	>>	2
+	%	debug:previous
+	>>	1
 	%
 Test.Output
