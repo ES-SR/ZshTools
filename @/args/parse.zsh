@@ -1,6 +1,7 @@
 #!/bin/zsh
 ##  @args:parse
 
+
 function __@tree:unpack:toArray {
         local AAName=${1:?}
         local Key=${2:?}
@@ -88,18 +89,24 @@ function __@args:parse {
                         Arrays=( ${Arrays[2,-1]} )
                 }
         }
-        local -A Counts
+        local -A FlagCounts
+        local -aU FlagArrayNames
         for A ( ${Arrays} ) {
                 : ${(A)Arr::=${(z)A}}
                 local MaxVal=${${${(A)${(s.:.)Specs_Str[${Arr[1]}]}}[3]//'*'/$(( $#Arr - 1 ))}:-$(( -1 ))}
                 (( MaxVal = MaxVal + 1 < $#Arr ? MaxVal + 1 : $#Arr ))
                 local FlagArrName="${Arr[1]}"
                 local Elements=( ${Arr[2,$(( MaxVal ))]} )
-                (( Counts[$FlagArrName]+=1 ))
-                local Count=${Counts[${FlagArrName}]}
+                (( FlagCounts[$FlagArrName]+=1 ))
+                local Count=${FlagCounts[${FlagArrName}]}
                 local Remove=( ${FlagArrName} ${Elements} )
                 argv+=( ${Arr:|Remove} )
-                printf "%s=( %s )\n" "${FlagArrName}" "${${Elements}:-${Count}}"
+                eval $( printf "%s=( %s )\n" "${FlagArrName}" "${${Elements}:-${Count}}" )
+                FlagArrayNames+=( $FlagArrName )
+        }
+        for F ( ${FlagArrayNames} ) {
+                typeset -p ${F}
+                print ";"
         }
         typeset -p argv
 }
@@ -107,7 +114,7 @@ alias @args:parse="__@args:parse \"\${argv}\""
 
 
 :<<-"Test.Output"
-	% #functions -T __@args:parse
+	%
 		unset TestArgs;
 		TestArgs=(  -V value -d 1 2 log.file Debug  --verbose )
 		@print:pel:cascade " No Specs "
@@ -121,20 +128,25 @@ alias @args:parse="__@args:parse \"\${argv}\""
 
 		@print:pel:cascade " +-V(alue|)+value=1 verbose debug=3 "
 		__@args:parse "${TestArgs}" +-V(alue|)+value=1 verbose debug=3
-	> ...............................................  No Specs  ...............................................
+	> .......................................................  No Specs  .......................................................
 	> typeset -a argv=( -V value -d 1 2 log.file Debug --verbose )
-	> ................................................  verbose  ...............................................
-	> verbose=( 1 )
+	> ........................................................  verbose  .......................................................
+	> typeset -g -a verbose=( 1 )
+	> ;
 	> typeset -a argv=( -V value -d 1 2 log.file Debug )
-	> .............................................  verbose debug  ............................................
-	> debug=( 1 )
-	> debug=( 2 )
-	> verbose=( 1 )
+	> .....................................................  verbose debug  ....................................................
+	> typeset -g -a debug=( 2 )
+	> ;
+	> typeset -g -a verbose=( 1 )
+	> ;
 	> typeset -a argv=( -V value 1 2 log.file )
-	> ................................ +- +-V(alue|)+value=1 verbose debug=3  +-................................
-	> value=( value )
-	> debug=( 1 2 log.file )
-	> debug=( 2 )
-	> verbose=( 1 )
+	> ........................................ +- +-V(alue|)+value=1 verbose debug=3  +-........................................
+	> typeset -g -a value=( value )
+	> ;
+	> typeset -g -a debug=( 2 )
+	> ;
+	> typeset -g -a verbose=( 1 )
+	> ;
 	> typeset -a argv=(  )
-Enterprise%
+	%
+Test.Output
