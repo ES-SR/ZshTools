@@ -58,13 +58,6 @@ function @args:parse:flagspecs {
 	typeset -p Specs_Patterns
 }
 
-function @args:parse:splitOnFlags {
-        declare -A Specs_Patterns=( "${(P@kv)1:?}" )
-        @tree:new Specs_Patterns
-
-        @array:pattern:all Args MetaPattern
-}
-
 function __@args:parse {
 	declare ArgsStr="${(j.:.)${(z@)1}}"
 	declare -a Args
