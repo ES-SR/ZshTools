@@ -33,7 +33,7 @@ source /path/to/your/args_parser.zsh
 
 ## Core Usage
 
-You use the parser by calling its alias within your script. It reads the shell's `$argv` array, processes it according to your specifications, and creates new arrays in your shell's scope that hold the results.`
+You use the parser by calling its alias within your script. It reads the shell's `$argv` array, processes it according to your specifications, and creates new arrays in your shell's scope that hold the results.
 
 The basic syntax is:
 @args:parse 'spec1' 'spec2' ...
@@ -53,13 +53,13 @@ The basic syntax is:
 
 ## The Post-Parsing Environment
 
-After `@args:parse` runs, it modifies your shell's environment in three key ways:`
+After `@args:parse` runs, it modifies your shell's environment in three key ways:
 
-1.  **Flag Arrays Are Created:** The parser creates arrays for each matched flag (e.g., `verbose`, `file`) containing their respective values or counts.`
+1.  **Flag Arrays Are Created:** The parser creates arrays for each matched flag (e.g., `verbose`, `file`) containing their respective values or counts.
 
-2.  **`argv` is Cleaned:** All flags and any arguments they consumed are removed from the `$argv` array. The `argv` array is then repopulated with only the remaining positional arguments, in their original order.`
+2.  **`argv` is Cleaned:** All flags and any arguments they consumed are removed from the `$argv` array. The `argv` array is then repopulated with only the remaining positional arguments, in their original order.
 
-3.  **Iterators Are Attached:** The full iterator interface (`:next`, `:previous`, etc.) is automatically attached to every flag array created AND to the final `argv` array, allowing you to easily cycle through all parsed results.`
+3.  **Iterators Are Attached:** The full iterator interface (`:next`, `:previous`, etc.) is automatically attached to every flag array created AND to the final `argv` array, allowing you to easily cycle through all parsed results.
 
 
 ## Flag Specification Syntax
@@ -67,22 +67,22 @@ After `@args:parse` runs, it modifies your shell's environment in three key ways
 You define how flags are parsed by providing string specifications.
 
 ### Boolean Flags
-A flag name by itself is treated as a boolean that counts its occurrences. The result is a **single-element array** containing the total count. As with all flags, **each matched instance is removed** from the final `$argv` array.`
+A flag name by itself is treated as a boolean that counts its occurrences. The result is a **single-element array** containing the total count. As with all flags, **each matched instance is removed** from the final `$argv` array.
 
 * **Spec:** `verbose`     * Usage: `./script -v --verbose other-arg`     * Result: `verbose=(2)`, `argv=(other-arg)`
 
 ### Flags with a Maximum Number of Arguments
-Use `\=N` to specify that a flag takes a maximum of `N` arguments.`
+Use `\=N` to specify that a flag takes a maximum of `N` arguments.
 
 * **Spec:** `file=1`     * Usage: `./script --file /etc/hosts`     * Result: `file=(/etc/hosts)`
 
 ### Flags That Consume All Following Arguments
-Use `\=*` to have a flag consume all subsequent arguments until it hits the next flag. This is the key to creating subcommands.`
+Use `\=*` to have a flag consume all subsequent arguments until it hits the next flag. This is the key to creating subcommands.
 
 * **Spec:** `exec=`      Usage: `./script --exec ls -l /tmp`     * Result: `exec=(ls -l /tmp)`
 
 ### Flags with Custom Patterns (Advanced)
-You can provide your own regex pattern. The `+` characters are used as delimiters and are not part of the pattern itself.`
+You can provide your own regex pattern. The `+` characters are used as delimiters and are not part of the pattern itself.
 
 * **Spec:** `+(-|--)i(n(clude|)|)+include=`      Usage: Matches `-i`, `--in`, and `--include`.     * Result: `include=(...)`
 
@@ -92,7 +92,7 @@ You can provide your own regex pattern. The `+` characters are used as delimiter
 ### Common Use Cases
 
 #### Simple Help Flag
-This pattern executes a `help` function if `--help` or `-h` is found.`
+This pattern executes a `help` function if `--help` or `-h` is found.
 ```zsh
 help() {
   cat <<-"EndOfHelp"
@@ -125,7 +125,7 @@ print "Reading from '$input[1]' and writing to '$output[1]'."
 ### Advanced Patterns & Techniques 🚀
 
 #### Subcommand Dispatcher
-By naming flags after your functions, you can create elegant `git`-like interfaces.`
+By naming flags after your functions, you can create elegant `git`-like interfaces.
 ```zsh
 # Define functions to act as subcommands
 push() { print "Executing: git push $@" }
@@ -145,7 +145,7 @@ commit() { print "Executing: git commit -m '$1'" }
 #### Multi-Level Verbosity Control
 This shows two powerful ways to handle verbosity.
 
-**1. Using a `case` Statement:**`
+**1. Using a `case` Statement:**
 ```zsh
 @args:parse verbose
 
@@ -191,7 +191,7 @@ This parser is an evolving project. The planned next major version aims to move 
 
 This architectural shift would transform the parser from a "flag processor" to an **"argument data structure builder,"** providing several key benefits:
 
-* **Clean Namespace:** All parsed data would live under a single entry point (e.g., `Args`), preventing pollution of the global variable space. Instead of `$verbose` and `$file`, you would access `Args:Flags:verbose` and `Args:Flags:file`.     * Rich Metadata: The tree structure makes it easy to attach metadata to the parsed results, such as the order in which flags appeared, the specific pattern that matched a flag, or overall parsing statistics.     * Multi-Level Iteration: The existing iterator system would be integrated directly into the tree, allowing for powerful, hierarchical iteration:`
+* **Clean Namespace:** All parsed data would live under a single entry point (e.g., `Args`), preventing pollution of the global variable space. Instead of `$verbose` and `$file`, you would access `Args:Flags:verbose` and `Args:Flags:file`.     * Rich Metadata: The tree structure makes it easy to attach metadata to the parsed results, such as the order in which flags appeared, the specific pattern that matched a flag, or overall parsing statistics.     * Multi-Level Iteration: The existing iterator system would be integrated directly into the tree, allowing for powerful, hierarchical iteration:
 ```zsh
 # Cycle through the names of all flags that were found
 Args:Flags:next
