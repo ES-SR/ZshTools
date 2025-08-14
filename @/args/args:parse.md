@@ -36,7 +36,7 @@ source /path/to/your/args_parser.zsh
 You use the parser by calling its alias within your script. It reads the shell's `$argv` array, processes it according to your specifications, and creates new arrays in your shell's scope that hold the results.
 
 The basic syntax is:
-@args:parse 'spec1' 'spec2' ...
+`@args:parse 'spec1' 'spec2' ...`
 
 **Example:**
 ```zsh
@@ -72,12 +72,12 @@ A flag name by itself is treated as a boolean that counts its occurrences. The r
 * **Spec:** `verbose`     * Usage: `./script -v --verbose other-arg`     * Result: `verbose=(2)`, `argv=(other-arg)`
 
 ### Flags with a Maximum Number of Arguments
-Use `\=N` to specify that a flag takes a maximum of `N` arguments.
+Use `=N` to specify that a flag takes a maximum of `N` arguments.
 
 * **Spec:** `file=1`     * Usage: `./script --file /etc/hosts`     * Result: `file=(/etc/hosts)`
 
 ### Flags That Consume All Following Arguments
-Use `\=*` to have a flag consume all subsequent arguments until it hits the next flag. This is the key to creating subcommands.
+Use `=*` to have a flag consume all subsequent arguments until it hits the next flag. This is the key to creating subcommands.
 
 * **Spec:** `exec=`      Usage: `./script --exec ls -l /tmp`     * Result: `exec=(ls -l /tmp)`
 
