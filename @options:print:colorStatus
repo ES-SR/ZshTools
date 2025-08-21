@@ -1,0 +1,19 @@
+#!/bin/zsh
+
+
+autoload -Uz @options:print:colorStatus
+function @options:print:colorStatus {
+	local -A Options=( ${(kv)options} )
+	local Pattern=${1:-"*"}
+
+	emulate -L zsh
+	options[extendedglob]=on
+
+	zmodload zsh/nearcolor
+	local -A Fg=( [on]='#00FF00' [off]='#FF0000' )
+	local -a Bg=( '#000000' '#121212' )
+
+	print -c ${(*%)${(*ok)Options[(I)${~Pattern}]}//(#m)(*)/"%K{${Bg[((C=((C+1)%2)))+1]}} %F{${Fg[${Options[${MATCH}]}]}}${MATCH}%E%f"}   
+	print -nP "%k" 
+}
+
