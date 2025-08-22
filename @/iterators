@@ -1,41 +1,84 @@
 #!/bin/zsh
-##  @iterators.zsh
 
 
-function __@iterators:arrays:initialize:Iterator_Indices {
-	(( ${+Iterator_Indices} )) || {
-		declare -HgAx Iterator_Indices         
-	}                                                       
+() {
+
+autoload -Uz __@iterators:initialize:Iterator_Indices
+function __@iterators:initialize:Iterator_Indices {
+        (( ${+Iterator_Indices} )) || {
+                declare -HgAx Iterator_Indices
+        }
 }
 
-function @iterators:arrays:next {
-	local ArrayName=${1:?}
-	__@iterators:arrays:initialize:Iterator_Indices
-	# Use the global Iterator_Indices for this array's index
-	# Increment index, wrapping around to 1 if it exceeds array length
-	print -P - ${${(P)ArrayName}[(( \
-		Iterator_Indices[ArrayName] = \
-			Iterator_Indices[ArrayName] + 1 > ${#${(P)ArrayName}} \
-			? 1 \
-			: Iterator_Indices[ArrayName] + 1 \
-	))]}
+autoload -Uz @iterators:current
+function @iterators:current {
+        local ArrayName=${1:?}
+        __@iterators:initialize:Iterator_Indices
+
+        print ${${(P)ArrayName}[$(( Iterator_Indices[ArrayName]=${${Iterator_Indices[ArrayName]}:-1} ))]}
 }
 
-function @iterators:arrays:previous {
-	local ArrayName=${1:?}
-	__@iterators:arrays:initialize:Iterator_Indices
-	# Use the global Iterator_Indices for this array's index
-	# Decrement index, wrapping around to array length if it goes below 1
-	print -P - ${${(P)ArrayName}[(( \
-		Iterator_Indices[ArrayName] = \
-			Iterator_Indices[ArrayName] - 1 < 1 \
-			? ${#${(P)ArrayName}} \
-			: Iterator_Indices[ArrayName] - 1 \
-	))]}
+autoload -Uz @iterators:next
+function @iterators:next {
+        local ArrayName=${1:?}
+        __@iterators:initialize:Iterator_Indices
+        # Use the global Iterator_Indices for this array's index
+        # Increment index, wrapping around to 1 if it exceeds array length
+        print -P - ${${(P)ArrayName}[(( \
+                Iterator_Indices[ArrayName] = \
+                        Iterator_Indices[ArrayName] + 1 > ${#${(P)ArrayName}} \
+                        ? 1 \
+                        : Iterator_Indices[ArrayName] + 1 \
+        ))]}
 }
 
+autoload -Uz @iterators:previous
+function @iterators:previous {
+        local ArrayName=${1:?}
+        __@iterators:initialize:Iterator_Indices
+        # Use the global Iterator_Indices for this array's index
+        # Decrement index, wrapping around to array length if it goes below 1
+        print -P - ${${(P)ArrayName}[(( \
+                Iterator_Indices[ArrayName] = \
+                        Iterator_Indices[ArrayName] - 1 < 1 \
+                        ? ${#${(P)ArrayName}} \
+                        : Iterator_Indices[ArrayName] - 1 \
+        ))]}
+}
 
-:<<-"DEPRECATED.array:[next,prev].RENAMED.@iterators:arrays:[next,previous]"
+autoload -Uz @iterators:cycle:forward
+function @iterators:cycle:forward {
+        local ArrayName=${1:?}
+        local -a Array=( ${(P)ArrayName} )
+
+        eval "${ArrayName}=( $Array[2,-1] $Array[1] )"
+        #print -P - ${${(P)ArrayName}[1]
+}
+
+autoload -Uz @iterators:cycle:backward
+function @iterators:cycle:backward {
+        local ArrayName=${1:?}
+        local -a Array=( ${(P)ArrayName} )
+
+        eval "${ArrayName}=( $Array[-1] $Array[1,-2] )"
+        #print -P - ${${(P)ArrayName}[1]}
+}
+
+autoload -Uz @iterators:asIterator
+function @iterators:asIterator {
+        local ArrayName=${1:?}
+        __@iterators:initialize:Iterator_Indices
+        Iterator_Indices[${ArrayName}]=1
+        alias "${ArrayName}:current"="@iterators:current ${ArrayName}"
+        alias "${ArrayName}:next"="@iterators:next ${ArrayName}"
+        alias "${ArrayName}:previous"="@iterators:previous ${ArrayName}"
+        alias "${ArrayName}:cycle:forward"="@iterators:cycle:forward ${ArrayName}"
+        alias "${ArrayName}:cycle:backward"="@iterators:cycle:backward ${ArrayName}"
+}
+
+}
+
+:<<-"DEPRECATED"
 	updated and renamed. uses global indices store
 	uses new naming convention
 	ready for planned use in @args:parse
@@ -53,27 +96,7 @@ function @iterators:arrays:previous {
 	
 		eval "echo \${${ArrayName}[(( ${IndexName} = ( ( ${IndexName} + \${#${ArrayName}} - 2 ) % \${#${ArrayName}} ) + 1 )) ]}"
 	}
-DEPRECATED.array:[next,prev].RENAMED.@iterators:arrays:[next,previous]
 
-
-function @iterators:arrays:cycle:forward {
-	local ArrayName=${1:?}
-	local -a Array=( ${(P)ArrayName} )
-
-	eval "${ArrayName}=( $Array[2,-1] $Array[1] )"
-	#print -P - ${${(P)ArrayName}[1]
-}
-
-function @iterators:arrays:cycle:backward {
-	local ArrayName=${1:?}
-	local -a Array=( ${(P)ArrayName} )
-
-	eval "${ArrayName}=( $Array[-1] $Array[1,-2] )"
-	#print -P - ${${(P)ArrayName}[1]}
-}
-
-
-:<<-"DEPRECATED.array:stateless[Next,Prev].RENAMED.@iterators:arrays:cycle:[forward,backward]"
 	updated and renamed
 	uses new naming convention
 	ready for planned use in @args:parse
@@ -120,16 +143,7 @@ function @iterators:arrays:cycle:backward {
 			sleep .1
 		}
 		echo ""; tput cnorm
-DEPRECATED.array:stateless[Next,Prev].RENAMED.@iterators:arrays:cycle:[forward,backward]
-
-
-function @iterators:arrays:asIterator {
-	local ArrayName=${1:?}
-	alias "${ArrayName}:next"="@iterators:arrays:next ${ArrayName}"
-	alias "${ArrayName}:previous"="@iterators:arrays:previous ${ArrayName}"
-	alias "${ArrayName}:cycle:forward"="@iterators:arrays:cycle:forward ${ArrayName}"
-	alias "${ArrayName}:cycle:backward"="@iterators:arrays:cycle:backward ${ArrayName}"
-}
+DEPRECATED
 
 
 #####################################################################################
