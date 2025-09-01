@@ -11,10 +11,9 @@ function @vars:type {
 		(( $? )) && echo NotSet
 	)##((-[AaT](T|))|(NotSet))##} )
 
-		
 	Declaration=${Declaration:s/-aT/TiedArray/:s/-T/TiedString/}
 	Declaration=${Declaration:s/-A/AssociativeArray/:s/-a/Array/}
-	Declaration=${Declaration:-Scalar}	
+	Declaration=${Declaration:-Scalar}
 
 	print - $Declaration
 }
@@ -24,9 +23,19 @@ function @vars:type {
 
 
 :<<-"Example.@vars:type"
-	typeset TStr; typeset -a TArr; typeset -A TAA
-	@vars:type TStr; print $?
-	@vars:type TArr; print $?
-	@vars:type TAA; print $?
-	@vars:type NotSet; print $?
+	<
+		typeset Str; typeset -a Arr; typeset -A AA; typeset -T TStr TArr;
+		@vars:type Str
+		@vars:type Arr
+		@vars:type AA
+		@vars:type TStr
+		@vars:type TArr
+		@vars:type NotSet
+	>
+		Scalar
+		Array
+		AssociativeArray
+		TiedString
+		TiedArray
+		NotSet
 Example.@vars:type
