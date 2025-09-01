@@ -26,7 +26,16 @@ function @print:pel {
 
 
 @print:pel "$@"
+
 } "$@"
+
+alias @print:center='@print:pel \  \  1,1 '
+alias @print:right='@print:pel \  \  1,0 '
+alias @print:left='@print:pel \  \  0,1 '
+alias @print:header:main='@print:pel "[ , ]"  =  1,1 '
+alias @print:header:sub='@print:pel "| , |"  -  1,4 '
+alias @print:header:right='@print:pel ": , :"  " ,-"  2,1 '
+
 
 :<<-"Examples.@print:pel"
 	<
