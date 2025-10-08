@@ -23,7 +23,7 @@
 			EmptyReads=0
 			local Tokens=(${(0)=${Buffer//${Delimiter}/$'\0'${Delimiter}$'\0'}})
 			local OutputTokens=(${Tokens[1,-2]})
-			print -n - "${OutputTokens:^^OutDelim}"
+			print -n - ${OutputTokens:^^OutDelim}
 			Buffer="${Tokens[-1]}"
 		}
 		print -r -- "$Buffer"
