@@ -153,79 +153,78 @@ function @iterator:logic:current:index {
 }
 
 
-:<<<"EXAMPLE USAGE"
+:<<-"EXAMPLES"
+	echo "--- Example 1: Basic Object Creation ---"
+	MyData=( k-gram similarity analysis )
+	# Use eval to execute the output of the factory.
+	eval "$( @as:object MyData ArrayType "String List" )"
+	print "MyData is now a ${(t)MyData}."
+	print "Initial Metadata:"
+	print -l ${(kv)MyData}
+	echo ""
 
-echo "--- Example 1: Basic Object Creation ---"
-MyData=( k-gram similarity analysis )
-# Use eval to execute the output of the factory.
-eval "$( @as:object MyData ArrayType "String List" )"
-print "MyData is now a ${(t)MyData}."
-print "Initial Metadata:"
-print -l ${(kv)MyData}
-echo ""
+	# --- Example 2: Attaching a Typed, Named Interface ---"
+	# Use our specialized factory to create an iterator named 'mainLoop'.
+	@as:iterator MyData mainLoop
+	echo ""
 
-# --- Example 2: Attaching a Typed, Named Interface ---"
-# Use our specialized factory to create an iterator named 'mainLoop'.
-@as:iterator MyData mainLoop
-echo ""
+	echo "--- Example 3: Using the Interface ---"
+	print -n "1st call to MyData:mainLoop:next -> "
+	MyData:mainLoop:next
+	print -n "2nd call to MyData:mainLoop:next -> "
+	MyData:mainLoop:next
+	print -n "Current value is now -> "
+	MyData:mainLoop:current
+	echo ""
 
-echo "--- Example 3: Using the Interface ---"
-print -n "1st call to MyData:mainLoop:next -> "
-MyData:mainLoop:next
-print -n "2nd call to MyData:mainLoop:next -> "
-MyData:mainLoop:next
-print -n "Current value is now -> "
-MyData:mainLoop:current
-echo ""
-
-# --- Example 4: Proving Iterator Independence (Nested Loop) ---"
-print "--- Attaching a second iterator to the same object... ---"
-@as:iterator MyData outerLoop
-@as:iterator MyData innerLoop
-echo ""
-print "--- Running a nested loop test ---"
-# This proves the 'outerLoop' and 'innerLoop' states are independent.
-for i in {1..2}; {
-	print -n "Outer loop at: "
-	MyData:outerLoop:next
-	for j in {1..3}; {
-		print -n "  -> Inner loop at: "
-		MyData:innerLoop:next
+	# --- Example 4: Proving Iterator Independence (Nested Loop) ---"
+	print "--- Attaching a second iterator to the same object... ---"
+	@as:iterator MyData outerLoop
+	@as:iterator MyData innerLoop
+	echo ""
+	print "--- Running a nested loop test ---"
+	# This proves the 'outerLoop' and 'innerLoop' states are independent.
+	for i in {1..2}; {
+		print -n "Outer loop at: "
+		MyData:outerLoop:next
+		for j in {1..3}; {
+			print -n "  -> Inner loop at: "
+			MyData:innerLoop:next
+		}
 	}
-}
-echo ""
+	echo ""
 
-echo "--- Final Object State ---"
-print "The object now contains the independent states for all three iterators:"
-print -l ${(kv)MyData}
-echo ""
+	echo "--- Final Object State ---"
+	print "The object now contains the independent states for all three iterators:"
+	print -l ${(kv)MyData}
+	echo ""
+	
+	# --- Example 5: Building a New "Class" Factory (Advanced) ---"
+	print "--- Demonstrating extensibility by creating a new 'Cycler' factory ---"
 
-# --- Example 5: Building a New "Class" Factory (Advanced) ---"
-print "--- Demonstrating extensibility by creating a new 'Cycler' factory ---"
+	# 1. Define the logic for the new interface type.
+	function @iterator:logic:cycle:forward {
+		local ObjectName=$1 StateKey=$2
+		local -a Payload=(${(0)${(P)ObjectName}[$ObjectName]})
+		Payload=($Payload[2,-1] $Payload[1]) # Rotate the array
+		local -T SerializedData Payload=($Payload) $'\0'
+		noglob typeset -g "${ObjectName}[${ObjectName}]"=${(q+)SerializedData} # MUTATE object
+		print -r -- "$Payload[1]"
+	}
 
-# 1. Define the logic for the new interface type.
-function @iterator:logic:cycle:forward {
-	local ObjectName=$1 StateKey=$2
-	local -a Payload=(${(0)${(P)ObjectName}[$ObjectName]})
-	Payload=($Payload[2,-1] $Payload[1]) # Rotate the array
-	local -T SerializedData Payload=($Payload) $'\0'
-	noglob typeset -g "${ObjectName}[${ObjectName}]"=${(q+)SerializedData} # MUTATE object
-	print -r -- "$Payload[1]"
-}
+	# 2. Create the new specialized factory.
+	function @as:cycler {
+		local ObjectName=$1 InstanceName=$2
+		local -A Contract=( next @iterator:logic:cycle:forward )
+		__object:attach:generic_interface $ObjectName $InstanceName $Contract
+		print -r -- "Attached CYCLER interface '${InstanceName}' to object '${ObjectName}'"
+	}
 
-# 2. Create the new specialized factory.
-function @as:cycler {
-	local ObjectName=$1 InstanceName=$2
-	local -A Contract=( next @iterator:logic:cycle:forward )
-	__object:attach:generic_interface $ObjectName $InstanceName $Contract
-	print -r -- "Attached CYCLER interface '${InstanceName}' to object '${ObjectName}'"
-}
-
-# 3. Use the new factory.
-MyCycler=( 1 2 3 )
-eval "$( @as:object MyCycler )"
-@as:cycler MyCycler main
-print -n "Cycling: "; MyCycler:main:next
-print -n "Cycling: "; MyCycler:main:next
-print "Final cycler data: ${(0)MyCycler[MyCycler]}"
-
+	# 3. Use the new factory.
+	MyCycler=( 1 2 3 )
+	eval "$( @as:object MyCycler )"
+	@as:cycler MyCycler main
+	print -n "Cycling: "; MyCycler:main:next
+	print -n "Cycling: "; MyCycler:main:next
+	print "Final cycler data: ${(0)MyCycler[MyCycler]}"
+EXAMPLES
