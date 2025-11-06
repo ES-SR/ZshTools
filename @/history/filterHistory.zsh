@@ -19,25 +19,21 @@
 	)
 
 	function @history:filterHistory {
-		local -i StartEntry="${1:-1}"
-		local -i EndEntry="${2:--1}"  # -1 means to current
-		local -a CustomPatterns=()
+		# Search history for matching patterns (positive filter)
+		# Shows only lines that match at least one of the provided patterns
 
-		# Allow passing custom patterns as additional arguments
-		if [[ $# -gt 2 ]]; then
-			shift 2
-			CustomPatterns=("$@")
+		if [[ $# -eq 0 ]]; then
+			print "Usage: @history:filterHistory <pattern> [pattern2 ...]"
+			print "Examples:"
+			print "  @history:filterHistory 'function @'     # Show function definitions starting with @"
+			print "  @history:filterHistory 'git' 'npm'       # Show git or npm commands"
+			print "  @history:filterHistory '^function @.*'   # Regex: functions starting with @"
+			return 1
 		fi
 
-		# Use custom patterns if provided, otherwise use defaults
-		local -a Patterns=()
-		if [[ ${#CustomPatterns[@]} -gt 0 ]]; then
-			Patterns=("${CustomPatterns[@]}")
-		else
-			Patterns=("${HISTORY_FILTER_PATTERNS[@]}")
-		fi
+		local -a SearchPatterns=("$@")
 
-		# Build awk pattern
+		# Build awk script for pattern matching
 		local AwkScript='
 		BEGIN {
 			# Build pattern array from shell variable
@@ -45,9 +41,56 @@
 		}
 		{
 			line = $0
+			matched = 0
+
+			# Check each pattern - if any match, include the line
+			for (i in pattern_arr) {
+				if (pattern_arr[i] != "" && match(line, pattern_arr[i])) {
+					matched = 1
+					break
+				}
+			}
+
+			if (matched) {
+				print line
+			}
+		}'
+
+		# Get history and filter for matching patterns
+		fc -l 1 | awk -v patterns="${(F)SearchPatterns}" "$AwkScript"
+	}
+
+	function @history:exportFilteredHistory {
+		# Exports history with unwanted commands removed (cd, ls, pwd, etc.)
+		local OutputFile="${HISTFILE:r}.$(date +%s)"
+		local Editor="${EDITOR:-vi}"
+		local StartEntry="${1:-1}"
+		local -a CustomExcludePatterns=()
+
+		# Allow passing custom exclude patterns
+		if [[ $# -gt 1 ]]; then
+			shift
+			CustomExcludePatterns=("$@")
+		fi
+
+		# Use custom patterns if provided, otherwise use defaults
+		local -a ExcludePatterns=()
+		if [[ ${#CustomExcludePatterns[@]} -gt 0 ]]; then
+			ExcludePatterns=("${CustomExcludePatterns[@]}")
+		else
+			ExcludePatterns=("${HISTORY_FILTER_PATTERNS[@]}")
+		fi
+
+		# Build awk script for exclusion filtering
+		local AwkScript='
+		BEGIN {
+			split(patterns, pattern_arr, "\n")
+		}
+		{
+			line = $0
 			skip = 0
 
-			# Check each pattern
+			# Check each pattern - if any match, exclude the line
 			for (i in pattern_arr) {
 				if (pattern_arr[i] != "" && match(line, pattern_arr[i])) {
 					skip = 1
@@ -60,29 +103,9 @@
 			}
 		}'
 
-		# Get history and filter
-		fc -l $StartEntry $EndEntry | awk -v patterns="${(F)Patterns}" "$AwkScript"
-	}
-
-	function @history:exportFilteredHistory {
-		local OutputFile="Hist.$(date +%s)"
-		local Editor="${HISTORY_EDITOR:-kate}"
-		local StartEntry="${1:-1}"
-		local -a CustomPatterns=()
-
-		# Allow passing custom patterns
-		if [[ $# -gt 1 ]]; then
-			shift
-			CustomPatterns=("$@")
-		fi
-
-		# Get filtered history
+		# Get filtered history (exclude unwanted commands)
 		local FilteredHistory
-		if [[ ${#CustomPatterns[@]} -gt 0 ]]; then
-			FilteredHistory=$(@history:filterHistory $StartEntry -1 "${CustomPatterns[@]}")
-		else
-			FilteredHistory=$(@history:filterHistory $StartEntry)
-		fi
+		FilteredHistory=$(fc -l $StartEntry | awk -v patterns="${(F)ExcludePatterns}" "$AwkScript")
 
 		# Format with decorative headers
 		local FormattedHistory
@@ -104,10 +127,11 @@
 			print "Filtered history exported to $OutputFile and opened in $Editor"
 		else
 			print "Filtered history exported to $OutputFile"
-			print "Editor '$Editor' not found. Set HISTORY_EDITOR variable or install the editor."
+			print "Editor '$Editor' not found. Set EDITOR variable or install the editor."
 		fi
 
-		print "Filtered using ${#HISTORY_FILTER_PATTERNS[@]} default patterns"
+		local PatternCount=${#ExcludePatterns[@]}
+		print "Excluded $PatternCount pattern(s) from history"
 	}
 
 	function @history:addFilterPattern {
@@ -137,36 +161,36 @@
 	}
 
 	:<<-'Usage'
-	# Filter history using default patterns (cd, ls, etc.)
-	@history:filterHistory
+	# Search history for patterns (shows matching lines only)
+	@history:filterHistory 'function @'           # Show function definitions starting with @
+	@history:filterHistory 'git' 'npm'            # Show git or npm commands
+	@history:filterHistory '^function @.*'        # Regex: functions starting with @
 
-	# Filter specific range
-	@history:filterHistory 100 200
-
-	# Filter with custom patterns
-	@history:filterHistory 1 -1 '^git status' '^echo'
-
-	# Export filtered history with timestamp filename
+	# Export history with unwanted commands removed (cd, ls, pwd, etc.)
+	# Output: ${HISTFILE:r}.$(date +%s)
 	@history:exportFilteredHistory
 
-	# Add custom pattern to default list
+	# Export with custom exclude patterns
+	@history:exportFilteredHistory 1 '^echo' '^test'
+
+	# Add custom pattern to default exclusion list
 	@history:addFilterPattern '^git status[[:space:]]*$'
 
-	# List current patterns
+	# List current exclusion patterns
 	@history:listFilterPatterns
 
-	# Clear all patterns
+	# Clear all exclusion patterns
 	@history:clearFilterPatterns
 
-	# Customize patterns in .zshrc before loading this file:
+	# Customize exclusion patterns in .zshrc before loading this file:
 	HISTORY_FILTER_PATTERNS=(
 		'^cd '
 		'^ls '
 		'^custom pattern here'
 	)
 
-	# Set custom editor (default: kate)
-	export HISTORY_EDITOR=vim
+	# Set custom editor (uses $EDITOR by default)
+	export EDITOR=vim
 	Usage
 
 }

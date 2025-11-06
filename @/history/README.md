@@ -15,9 +15,13 @@ Converts the original command into a function that exports history with a timest
 awk ' /^[[:space:]]*$/ { next }; { print $0 }; ' <(print -X 2 -- "$(fc -l 1 | awk ' { $1 = "#---------- " $1 " ----------#\n"; print $0 } ' )") | cat --squeeze-blank >| Hist.1 && kate Hist.1 &!
 ```
 
+**Changes:**
+- Output filename: `${HISTFILE:r}.$(date +%s)` (based on your history file with timestamp)
+- Editor: Uses `$EDITOR` environment variable (default: vi)
+
 **Usage:**
 ```zsh
-# Basic usage - exports to Hist.<timestamp>
+# Basic usage - exports to ${HISTFILE:r}.<timestamp>
 @history:exportFormattedHistory
 
 # Start from specific history entry
@@ -27,42 +31,47 @@ awk ' /^[[:space:]]*$/ { next }; { print $0 }; ' <(print -X 2 -- "$(fc -l 1 | aw
 @history:exportFormattedHistory 1 "^cd " "^ls"
 
 # Use custom editor
-HISTORY_EDITOR=vim @history:exportFormattedHistory
+EDITOR=vim @history:exportFormattedHistory
 ```
 
 ### @history:filterHistory
 
-Filters history based on configurable patterns to remove simple/repetitive commands.
-
-**Default Filtered Commands:**
-- Simple `cd` commands (cd, cd .., cd -)
-- Simple `ls` commands (ls, ls -l, ll)
-- `pwd`, `clear`, `exit`
-- `history` commands
+Searches history for matching patterns (positive filter). Shows only lines that match at least one pattern.
 
 **Usage:**
 ```zsh
-# Filter using default patterns
-@history:filterHistory
+# Find function definitions starting with @
+@history:filterHistory 'function @'
 
-# Filter specific range
-@history:filterHistory 100 200
+# Find git or npm commands
+@history:filterHistory 'git' 'npm'
 
-# Use custom patterns
-@history:filterHistory 1 -1 '^git status' '^echo'
+# Use regex patterns
+@history:filterHistory '^function @.*'
+```
+
+**Use Case Example:**
+```zsh
+# Extract all your custom function definitions
+@history:filterHistory 'function @' > my_functions.txt
 ```
 
 ### @history:exportFilteredHistory
 
-Combines filtering and export with formatted output.
+Exports history with unwanted commands removed (negative filter). Removes simple commands like cd, ls, pwd, etc.
+
+**Default Excluded Commands:**
+- Simple `cd` commands (cd, cd .., cd -)
+- Simple `ls` commands (ls, ls -l, ll)
+- `pwd`, `clear`, `exit`, `history`
 
 **Usage:**
 ```zsh
-# Export filtered history with timestamp
+# Export with default exclusions - exports to ${HISTFILE:r}.<timestamp>
 @history:exportFilteredHistory
 
-# Export with custom patterns
-@history:exportFilteredHistory 1 '^custom pattern'
+# Export with custom exclusion patterns
+@history:exportFilteredHistory 1 '^echo' '^test'
 ```
 
 ### @history:addFilterPattern
@@ -96,17 +105,23 @@ Remove all filter patterns.
 
 ### Custom Editor
 
-Set the `HISTORY_EDITOR` environment variable (default: kate):
+Set the `EDITOR` environment variable (default: vi):
 
 ```zsh
-export HISTORY_EDITOR=vim
+export EDITOR=vim
 # or
-export HISTORY_EDITOR=nano
+export EDITOR=nano
 ```
 
-### Custom Filter Patterns
+### Output File Location
 
-Define patterns in your `.zshrc` before loading these functions:
+Output files are automatically named based on your `HISTFILE`:
+- Pattern: `${HISTFILE:r}.$(date +%s)`
+- Example: If `HISTFILE=/home/user/.zsh_history`, output will be `/home/user/.zsh_history.1730901234`
+
+### Custom Exclusion Patterns
+
+Define exclusion patterns in your `.zshrc` before loading these functions:
 
 ```zsh
 typeset -ga HISTORY_FILTER_PATTERNS=(
@@ -135,22 +150,30 @@ autoload -Uz @history:filterHistory
 ## Examples
 
 ```zsh
-# Quick export with default settings
+# Quick export with default settings (output: ${HISTFILE:r}.<timestamp>)
 @history:exportFormattedHistory
 
-# Export filtered history (removes cd, ls, etc.)
+# Export filtered history (removes cd, ls, pwd, etc.)
 @history:exportFilteredHistory
 
-# Customize filter patterns
+# Search for specific patterns in history
+@history:filterHistory 'function @'           # Your custom functions
+@history:filterHistory 'git commit' 'git push'  # Git commands
+@history:filterHistory '^npm ' '^yarn '       # Package manager commands
+
+# Customize exclusion patterns
 @history:addFilterPattern '^npm install'
 @history:addFilterPattern '^yarn '
 @history:exportFilteredHistory
 
-# Check what's being filtered
+# Check what's being excluded
 @history:listFilterPatterns
 
-# Export to specific file with vim
-HISTORY_EDITOR=vim @history:exportFilteredHistory 1
+# Export with custom editor
+EDITOR=vim @history:exportFilteredHistory
+
+# Extract specific commands to file
+@history:filterHistory 'function @' > my_functions.txt
 ```
 
 ## Pattern Syntax

@@ -5,8 +5,8 @@
 () {
 
 	function @history:exportFormattedHistory {
-		local OutputFile="Hist.$(date +%s)"
-		local Editor="${HISTORY_EDITOR:-kate}"
+		local OutputFile="${HISTFILE:r}.$(date +%s)"
+		local Editor="${EDITOR:-vi}"
 		local StartEntry="${1:-1}"
 		local -a FilterCommands=()
 
@@ -60,12 +60,13 @@
 			print "History exported to $OutputFile and opened in $Editor"
 		else
 			print "History exported to $OutputFile"
-			print "Editor '$Editor' not found. Set HISTORY_EDITOR variable or install the editor."
+			print "Editor '$Editor' not found. Set EDITOR variable or install the editor."
 		fi
 	}
 
 	:<<-'Usage'
 	# Basic usage - export all history
+	# Output: ${HISTFILE:r}.$(date +%s)
 	@history:exportFormattedHistory
 
 	# Export from specific history entry
@@ -74,11 +75,11 @@
 	# Export with filtering (removes matching lines)
 	@history:exportFormattedHistory 1 "^cd " "^ls"
 
-	# Set custom editor
-	HISTORY_EDITOR=vim @history:exportFormattedHistory
+	# Set custom editor (uses $EDITOR by default)
+	EDITOR=vim @history:exportFormattedHistory
 
 	# Or set globally in your .zshrc
-	export HISTORY_EDITOR=nano
+	export EDITOR=nano
 	Usage
 
 }
