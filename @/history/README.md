@@ -74,31 +74,31 @@ Exports history with unwanted commands removed (negative filter). Removes simple
 @history:exportFilteredHistory 1 '^echo' '^test'
 ```
 
-### @history:addFilterPattern
+### @history:filterPatterns:add
 
-Add custom pattern to the default filter list.
+Add custom pattern to the default exclusion list.
 
 **Usage:**
 ```zsh
-@history:addFilterPattern '^git status[[:space:]]*$'
+@history:filterPatterns:add '^git status[[:space:]]*$'
 ```
 
-### @history:listFilterPatterns
+### @history:filterPatterns:list
 
-Display all current filter patterns.
+Display all current exclusion patterns.
 
 **Usage:**
 ```zsh
-@history:listFilterPatterns
+@history:filterPatterns:list
 ```
 
-### @history:clearFilterPatterns
+### @history:filterPatterns:clear
 
-Remove all filter patterns.
+Remove all exclusion patterns.
 
 **Usage:**
 ```zsh
-@history:clearFilterPatterns
+@history:filterPatterns:clear
 ```
 
 ## Configuration
@@ -162,12 +162,12 @@ autoload -Uz @history:filterHistory
 @history:filterHistory '^npm ' '^yarn '       # Package manager commands
 
 # Customize exclusion patterns
-@history:addFilterPattern '^npm install'
-@history:addFilterPattern '^yarn '
+@history:filterPatterns:add '^npm install'
+@history:filterPatterns:add '^yarn '
 @history:exportFilteredHistory
 
 # Check what's being excluded
-@history:listFilterPatterns
+@history:filterPatterns:list
 
 # Export with custom editor
 EDITOR=vim @history:exportFilteredHistory

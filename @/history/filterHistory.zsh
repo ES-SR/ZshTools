@@ -134,10 +134,10 @@
 		print "Excluded $PatternCount pattern(s) from history"
 	}
 
-	function @history:addFilterPattern {
+	function @history:filterPatterns:add {
 		if [[ -z "$1" ]]; then
-			print "Usage: @history:addFilterPattern <pattern>"
-			print "Example: @history:addFilterPattern '^git status[[:space:]]*\$'"
+			print "Usage: @history:filterPatterns:add <pattern>"
+			print "Example: @history:filterPatterns:add '^git status[[:space:]]*\$'"
 			return 1
 		fi
 
@@ -146,7 +146,7 @@
 		print "Total patterns: ${#HISTORY_FILTER_PATTERNS[@]}"
 	}
 
-	function @history:listFilterPatterns {
+	function @history:filterPatterns:list {
 		print "Current filter patterns (${#HISTORY_FILTER_PATTERNS[@]} total):"
 		local -i i=1
 		for pattern in "${HISTORY_FILTER_PATTERNS[@]}"; do
@@ -155,7 +155,7 @@
 		done
 	}
 
-	function @history:clearFilterPatterns {
+	function @history:filterPatterns:clear {
 		HISTORY_FILTER_PATTERNS=()
 		print "All filter patterns cleared"
 	}
@@ -174,13 +174,13 @@
 	@history:exportFilteredHistory 1 '^echo' '^test'
 
 	# Add custom pattern to default exclusion list
-	@history:addFilterPattern '^git status[[:space:]]*$'
+	@history:filterPatterns:add '^git status[[:space:]]*$'
 
 	# List current exclusion patterns
-	@history:listFilterPatterns
+	@history:filterPatterns:list
 
 	# Clear all exclusion patterns
-	@history:clearFilterPatterns
+	@history:filterPatterns:clear
 
 	# Customize exclusion patterns in .zshrc before loading this file:
 	HISTORY_FILTER_PATTERNS=(
