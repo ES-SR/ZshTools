@@ -1,61 +1,84 @@
-#!/bin/zsh
-
 () {
 
+	autoload -Uz @print:pel
+	function @print:pel {
+		emulate -L zsh; options[extendedglob]=on; @debug:init
+		local -a Args=(${argv})
+				@debug:print -l -- "Args:" $Args
+	
+		local -i LJustify=${Args[(i)(#s)[0-9]#(#e)]}
+		local -i RJustify=${Args[(I)(#s)[0-9]#(#e)]}
+		(( LJustify == RJustify )) && {
+			(( ARGC / 2.0 < LJustify )) && {
+				(( LJustify = 0 ))
+				RJustify=$Args[$RJustify]
+				Args=(${Args:#$RJustify})
+			} || {
+				(( RJustify = 0 ))
+				LJustify=$Args[$LJustify]
+				Args=(${Args:#$LJustify})
+			}
+		} || {
+			RJustify=${${Args[$RJustify]}:-0}
+			LJustify=${${Args[$LJustify]}:-0}
+			Args=(${Args:#$LJustify})
+			Args=(${Args:#$RJustify})
+		}
+		local -i LJ=${LJustify}
+		local -i RJ=${RJustify}
+		(( LJ + RJ )) || {
+			(( LJ = 1 , RJ = 1 ))
+		}
+		(( LJ = LJ * COLUMNS / ( LJ + RJ ) ))
+		(( RJ = COLUMNS - LJ ))
+				@debug:print -l -- \
+					"Args:" $Args \
+					"LJustify: ${LJustify}" "RJustify: ${RJustify}" \
+					"LJ: ${LJ}" "RJ: ${RJ}"
+	
+		local LMargin=${Args[(r)(#s)[^[:alnum:]]#(#e)]}
+		local RMargin=${Args[(R)(#s)[^[:alnum:]]#(#e)]}
+		(( ${(c)#LMargin} + ${(c)#RMargin} )) && {
+			Args=(${Args:#$LMargin})
+			Args=(${Args:#$RMargin})
+		}
+				@debug:print -l -- \
+					"Args:" $Args \
+					"LMargin: ${LMargin}" "RMargin: ${RMargin}" \
+	
+		local LPadding=${Args[(r)(#s)[^[:alnum:]]#(#e)]}
+		local RPadding=${Args[(R)(#s)[^[:alnum:]]#(#e)]}
+		(( ${(c)#LPadding} + ${(c)#RPadding} )) && {
+			Args=(${Args:#$LPadding})
+			Args=(${Args:#$RPadding})
+		}
+	
+		local Content LP RP LM RM
+		(( $#Args )) && {
+			LP=${LPadding:-" "}
+			RP=${RPadding:-" "}
+			LM=${LMargin:-"-"}
+			RM=${RMargin:-"-"}
 
-function @print:pel {
-  local Content=${@[-1]:-"."}
-  local argv=( ${@:#${@[-1]}} )
-  local C=$Content
-  local PaddingChars=${1:-${${(*M)Content##[^a-zA-Z0-9]##}:-" "}}
-  PaddingChars=( ${(s.,.)PaddingChars} )
-  local PCL=${PaddingChars[1]}
-  local PCR=${${PaddingChars[2]}:-${PCL}}
-  local MarginChars=${2:-"${${${(*M)PCL##[^a-zA-Z0-9 ]##}[1]}:-.},${${${(*M)PCR%%[^a-zA-Z0-9 ]##}[-1]}:-.}"}
-  MarginChars=( ${(s.,.)MarginChars} )
-  local MCL=${MarginChars[1]}
-  local MCR=${${MarginChars[2]}:-${MCL}}
-  local Justify=${3:-1}
-  Justify=( ${(s.,.)Justify} )
-  local -i JL="${Justify[1]}"
-  local -i JR="${${Justify[2]}:-${JL}}"
-  (( JL = JL * COLUMNS / ( JL + JR ) ))
-  (( JR = COLUMNS - JL ))
-  print -P -- ${(pel.((JL))..$MCL..$PCL.r.((JR))..$MCR..$PCR.)C}
-}
+			Content=${Args}
+			Args=()
+		} || {
+			LM=${LMargin}
+			RM=${RMargin}
+			LP=${LPadding:-$LM}
+			RP=${RPadding:-$RM}
+			Content="${LP}${RP}"
+			(( ${(c)#Content} )) || {
+				print -- ${(l.((COLUMNS))..-.)}
+				return
+			}
+		}
+				@debug:print -l -- \
+					"LMargin: ${LMargin}" "RMargin: ${RMargin}" \
+					"LPadding: ${LP}" "RPadding: ${RP}" \
+					"Content: ${Content}"
+	
+		print -P -- ${(pel.((LJ))..$LM..$LP.r.((RJ))..$RM..$RP.)Content}
+	}
 
-
-@print:pel "$@"
-
-} "$@"
-
-alias @print:center='@print:pel \  \  1,1 '
-alias @print:right='@print:pel \  \  1,0 '
-alias @print:left='@print:pel \  \  0,1 '
-alias @print:header:main='@print:pel "[ , ]"  =  1,1 '
-alias @print:header:sub='@print:pel "| , |"  -  1,4 '
-alias @print:header:right='@print:pel ": , :"  " ,-"  2,1 '
-
-
-:<<-"Examples.@print:pel"
-	<
-	  alias @print:main='@print:pel:cascade:v2  "[ "," ]" = '
-	  alias @print:sub='@print:pel:cascade:v2 "| "," |" \ -,-\  1,5'
-	  alias @print:right='@print:pel:cascade:v2 "| , :" \ ,-  2,1'
-	  alias @print:content:right='@print:pel:cascade:v2 \  \  5,1'
-	<
-	  @print:main "Main Section"
-	  @print:sub "First Subsection"
-	  print - "some content in first subsection"
-	  @print:right "Minor Section"
-	  @print:sub "Second Subsection"
-	  print - "some content in second subsection"
-	> ===================================[ Main Section ]====================================
-	> main section content
-	> - - - -| Sub Section |- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-	> sub section content
-	>                                                       | minor :------------------------
-	>                                                            less important information
-	> - - - -| Sub Section |- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-	> sub section content
-Examples.@print:pel
+} 
