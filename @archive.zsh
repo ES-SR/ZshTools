@@ -17,6 +17,7 @@ function @files:content:uniq:get {
 	print -l -- ${UniqFiles}
 }
 
+##TODO: replace this version written for development with the @files:compare function that impliments the feature better##
 autoload -Uz @files:content:uniq:keep
 function @files:content:uniq:keep {
 	emulate -L zsh; @debug:init
