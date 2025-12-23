@@ -14,18 +14,18 @@
 		local -x Split
 		function __@history:genSplit {
 			local -ax SplitChars=(
-				$'� '  # NUL
+				$'ƒ '  # NUL
 				$''  # SOH
 				$''  # STX
 				$''  # ETX
 				$''  # Group separator
 				$''  # Record separator
 				$''  # Unit separator
-				$' �'  # figure space
-				$' �'  # punctuation space
-				$' �'  # thin space
-				$' �'  # hair space
-				$' �'  # non-breaking hyphen
+				$'â€ƒ§'  # figure space
+				$'â€ƒ¨'  # punctuation space
+				$'â€ƒ©'  # thin space
+				$'â€ƒª'  # hair space
+				$'â€ƒ±'  # non-breaking hyphen
 			)
 			local Len=${1:-$(( RANDOM % 10 + 5 ))}
 
