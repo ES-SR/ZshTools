@@ -99,10 +99,10 @@ function @ack:run {
 	print -P "Result: %B$?%b" | tee -a ack.log
 }
 
-alias @ack="() { < /dev/null >|ack.log; time ( @ack:run \$1 \$2 \$3); }
+alias @ack="() { < /dev/null >|ack.log; time ( @ack:run \$1 \$2 \$3); }"
 
 
-function @ack {
+function @ackermann {
     integer M=$1 N=$2
     integer RegLo=$N RegHi=0
     local -A AckMemos
@@ -136,7 +136,7 @@ function @ack {
         (( RegLo = RegLo << 1 ))
     }
 
-    function __@ack {
+    function __@ackermann {
         integer M=$1
 
         local Key="${M},${RegLo},${RegHi}"
@@ -161,12 +161,12 @@ function @ack {
             if (( RegLo == 0 && RegHi == 0 )) {
                 # Case: A(m, 0) -> A(m-1, 1)
                 RegLo=1; RegHi=0
-                __@ack $(( M - 1 ))
+                __@ackermann $(( M - 1 ))
             } else {
                 # Case: A(m, n) -> A(m-1, A(m, n-1))
                 __@math:sub 1
-                __@ack $M
-                __@ack $(( M - 1 ))
+                __@ackermann $M
+                __@ackermann $(( M - 1 ))
             }
             # Reconstruct Key for storage (Registers changed)
             Key="${M},${SaveLo},${SaveHi}"
@@ -182,7 +182,7 @@ function @ack {
     # Execution
     # -------------------------------------------------------------------------
 
-    __@ack $M
+    __@ackermann $M
 
     # -------------------------------------------------------------------------
     # Output
@@ -200,6 +200,6 @@ function @ack {
     }
 
     # Cleanup: Prevent namespace pollution in the interactive shell
-    unfunction __@ack __@math:add __@math:sub __@math:shift:left
+    unfunction __@ackermann __@math:add __@math:sub __@math:shift:left
 }
 
