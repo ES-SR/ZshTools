@@ -142,6 +142,7 @@ function @args:parse:generatePattern {
                 print - $FullPattern
         }
 }
+
 function @args:parse:specsParse {
         emulate -L zsh
 
@@ -163,6 +164,7 @@ function @args:parse:specsParse {
 
         typeset -p1 Specs
 }
+
 function @args:parse:match {
         emulate -L zsh; options[extendedglob]=on
 
@@ -182,6 +184,7 @@ function @args:parse:match {
                 print -- ${(-k)Matches//(#m)(*)/"$MATCH $Matches[$MATCH]"}
         }
 }
+
 function __@args:parse {
         emulate -L zsh; options[extendedglob]=on
 
@@ -235,7 +238,34 @@ alias @args:parse="__@args:parse \"\${argv}\" "
 
 }
 
-: <<"DEPRICATED"
+:<<"Example.@args:parse"
+	() {
+		emulate -L zsh
+		# display the output
+		Test@args:parse Debug 'Extract:*' '(-#|)(#i)C(P|)':CustomPattern FS:FullSpec:3
+
+		# use the output
+		eval "$(Test@args:parse Debug 'Extract:*' '(-#|)(#i)C(P|)':CustomPattern FS:FullSpec:3)"
+		print -P -- "%F{cyan}${(l.10..-.)} ${(l.2.r.COLUMNS-13..-.. .):-"Debug"}%f"
+		print -l -- ${(kv)Debug}
+		print -P -- "%F{cyan}${(l.10..-.)} ${(l.3.r.COLUMNS-14..-.. .):-"Extract"}%f"
+		print -l -- ${(kv)Extract}
+		print -P -- "%F{cyan}${(l.10..-.)} ${(l.6.r.COLUMNS-17..-.. .):-"CustomPattern"}%f"
+		print -l -- ${(kv)CustomPattern}
+		print -P -- "%F{cyan}${(l.10..-.)} ${(l.4.r.COLUMNS-15..-.. .):-"FullSpec"}%f"
+		print -l -- ${(kv)FullSpec}
+		print -P -- "%F{cyan}${(l.10..-.)} ${(l.2.r.COLUMNS-13..-.. .):-"argv"}%f"
+		print -l -- ${argv}
+		print -P -- "%F{cyan}${(l.10..-.)} ${(l.4.r.COLUMNS-15..-.. .):-"CleanArgv"}%f"
+		print -l -- ${CleanArgv}
+	} hello -debug world Debug c -C ---C --extract some non-spec-matched args FS 4 args go here --D trailing args
+Example@args:parse
+
+
+
+
+
+: <<"DEPRECATED"
 emulate zsh -c '
 	autoload -Uz @tree:new 
 	autoload -Uz @iterators:arrays:asIterator
@@ -476,4 +506,4 @@ alias @args:parse="() { eval \$( __@args:parse \"\${argv}\" \"\$@\" ) } "
 	>>	1
 	%
 Test.Output
-DEPRICATED
+DEPRECATED
