@@ -4,7 +4,238 @@
 
 () {
 
+function @array:toAssoc @assoc:fromArray {
+        emulate -L zsh; options[extendedglob]=on
 
+        local Name=${(k)parameters[(I)${1:?}]}
+        if [[ ${(tP)Name} == "assoc"* ]] {
+                shift
+        } else {
+                unset Name
+        }
+        local -A Assoc=(${${(e):-{1..$ARGC}}:^argv})
+        local Output="$(typeset -p1 Assoc)"
+        (( ${+Name} )) && {
+                Output=${Output/Assoc/$Name}
+        }
+        print -- $Output
+}
+function @assoc:toArray @array:fromAssoc {
+        emulate -L zsh; options[extendedglob]=on
+
+        local Name=${(k)parameters[(I)${1:?}]}
+        if [[ ${(tP)Name} == "array"* ]] {
+                shift
+        } else {
+                unset Name
+        }
+        (( ARGC%2 )) && {
+                argv+=(NULL)
+                local NULL=1
+        }
+        local -A Assoc=("${(@)argv}")
+        local -a Array=(${()=${(-k)Assoc//(#m)(*)/"${MATCH}" "${Assoc[$MATCH]}"}})
+        (( NULL )) && {
+                Array=(${Array/NULL/})
+        }
+        local Output="$(typeset -p1 Array)"
+        (( $+Name )) && {
+                Output=${Output/Array/$Name}
+        }
+        print -- $Output
+}
+function @arrays:indices:normalize {
+        emulate -L zsh; options[extendedglob]=on
+
+        local -i ArrSize
+        if [[ ${1} == <0-> ]] {
+                (( ArrSize = ${1} ))
+        } elif (( ${(c)#${(k)parameters[(I)${1}]}} )) {
+                ArrSize=${(P)#1}
+        } else {
+                return 1
+        }
+        shift
+
+        local -i Idx
+        for Idx ( ${(-u)argv} ) {
+                (( Idx >= 0 )) && { break }
+                local -i NormalizedIdx
+                (( NormalizedIdx = ArrSize + 1 + Idx ))
+                argv=(${argv//$Idx/$NormalizedIdx})
+        }
+        print -- $argv
+}
+function @arrays:slice {
+        emulate -L zsh; options[extendedglob]=on
+
+        local ArrayName=${1:?}
+        local -a Array=("${(@P)ArrayName}")
+        shift
+
+        local Mode=${${argv[(R)(#s)(-|+|_)(#e)]}:-"+"}
+        argv=(${argv:#$Mode})
+
+        local -A Modes=(
+                ['+']=""
+                ['-']=": \${IdxStart::=\$(( IdxStart=IdxStart+1 ))}; : \${IdxEnd::=\$(( IdxEnd=IdxEnd+1 ))}"
+                ['_']=": \${IdxStart::=\$(( IdxStart=IdxStart+1 ))}"
+        )
+        local Cmds=("${Modes[$Mode]}" ": \${(A)Slice::=\${Array[\$IdxStart, \$IdxEnd]}}")
+
+        local -a argv=($(@arrays:indices:normalize $ARGC $argv))
+
+        local I=1 IdxStart=0 Idx=""
+        for Idx ( ${(-)argv} $(( ${#Array} + 1 )) ) {
+                local -i IdxEnd
+                (( IdxEnd = Idx - 1 ))
+                local -a Slice=()
+                ${(ze)Cmds}
+                local Output="$(typeset -p1 Slice)"
+                print ${Output/Slice/$ArrayName$IdxStart}
+
+                (( I++ ))
+                (( IdxStart = Idx ))
+        }
+}
+function @arrays:removeIndices {
+        emulate -L zsh
+
+        local ArrayName=${1:?}
+        shift
+        local -a Array=("${(@P)ArrayName}")
+
+        local -aU Indices=($(@arrays:indices:normalize $ArrayName "${(@)argv}"))
+        local Idx; for Idx ( ${(O-)Indices} ) {
+                Array[$Idx]=()
+        }
+
+        local Output="$(typeset -p1 Array)"
+        print -- ${Output/Array/$ArrayName}
+}
+
+function @args:parse:generatePattern {
+        emulate -L zsh; options[extendedglob]=on
+
+        (( ARGC )) || { return 1 }
+
+        local Arg; for Arg {
+                local FlagName="${Arg//-/_}"
+                local PartJoint="([-_]|)"
+                (( ${FlagName[(I)[a-zA-Z0-9]]} )) || {
+                        return 1
+                }
+                local -a PatternParts=(${(s._.)${FlagName//(#b)([a-z])([A-Z])/$match[1]_$match[2]}})
+                local LongPattern="${(pj.$PartJoint.)PatternParts}"
+                PatternParts=(${PatternParts//(#m)(*)/$MATCH[1]})
+                local ShortPattern="${(pj.$PartJoint.)PatternParts}"
+                local -aU Patterns=( ${LongPattern} ${ShortPattern} )
+                local FullPattern=""
+                (( $#Patterns > 1 )) && {
+                        local Long="((-|--|)${Patterns[1]})"
+                        local Short="((-|--)${Patterns[2]})"
+                        FullPattern="${Long}|${Short}"
+                } || {
+                        FullPattern="(-|--)${Patterns}"
+                }
+                local FullPattern="(#s)(#i)(${FullPattern})(#e)"
+                print - $FullPattern
+        }
+}
+function @args:parse:specsParse {
+        emulate -L zsh
+
+        local -A Specs=()
+
+        local Spec; for Spec {
+                local -a SpecParts=(${(s.:.)Spec})
+                local MaxVals="${${(M)Spec%:${~:-"(\*|<->)"}}#\:}"
+                SpecParts=(${SpecParts:#$MaxVals})
+                local Name=${SpecParts[-1]}
+                SpecParts[-1]=()
+                local Pattern=${${(j.:.)SpecParts}:-$(@args:parse:generatePattern $Name)}
+
+                Specs+=(
+                        [Order]="${Specs[Order]}:${Name}"
+                        [${Name}]="Pattern=${(b)Pattern}:MaxVals=${MaxVals:-Null}"
+                )
+        }
+
+        typeset -p1 Specs
+}
+function @args:parse:match {
+        emulate -L zsh; options[extendedglob]=on
+
+        local -A Assoc=()
+        if [[ ${(tP)1} == "array"* ]] {
+                local -a Array=(${(P)1})
+                Assoc=(${${(e):-{1..${#Array}}}:^Array})
+        } elif [[ ${(tP)1} == "assoc"* ]] {
+                Assoc=(${(kvP)1})
+        } else {
+                return 1
+        }
+        shift
+
+        local Pattern; for Pattern {
+                local -A Matches=(${(kv)Assoc[(R)${~Pattern}]})
+                print -- ${(-k)Matches//(#m)(*)/"$MATCH $Matches[$MATCH]"}
+        }
+}
+function __@args:parse {
+        emulate -L zsh; options[extendedglob]=on
+
+        local Args=("${(z@)${(s.=.)1}}")
+        shift
+
+        local -A Specs
+        eval "$(@args:parse:specsParse "${(@)argv}")"
+
+        typeset -p1 Args
+        typeset -p1 Specs
+
+        local -A IndexedArgs
+        eval "$(@array:toAssoc IndexedArgs "${(@)Args}")"
+
+        local -A Matches=()
+        local K=""; local V=""; for K V ( ${(kv)Specs} ) {
+                if [[ $K == "Order" ]] { continue }
+                local Name=${K}
+                local Pattern=""
+                local MaxVals=""
+                eval "${(s.:.)V}"
+
+                local -A SpecMatches=($(@args:parse:match IndexedArgs ${Pattern}))
+                Matches+=( [${Name}]=${(j.:.)${(k)SpecMatches}} )
+                local Output="$(typeset -p1 SpecMatches)"
+                print ${Output/SpecMatches/$Name}
+        }
+
+        local -aU DirtyArgs=(${(zs.:.)=Matches})
+        @arrays:slice Args _ "${(@)DirtyArgs}"
+        eval "$(@arrays:slice Args _ ${(zs.:.)=Matches})"
+        local SpecName=""; for SpecName ( ${(s.:.)Specs[Order]} ) {
+                local Pattern=""
+                local MaxVals=""
+                eval ${(s.:.)${Specs[$SpecName]}}
+                local -a SpecArr=()
+                local Match=""; for Match ( ${(s.:.)Matches[$SpecName]} ) {
+                        local -a PossibleArgs=(${(Pe):-"\$Args$((Match+1))"})
+                        SpecArr+=( ${PossibleArgs[1,${MaxVals/\*/${#PossibleArgs}}]} )
+                        DirtyArgs+=( {$Match..$((Match+${#SpecArr}))} )
+                }
+                local Output="$(typeset -p1 SpecArr)"
+                print -- ${Output//SpecArr/$SpecName}
+        }
+        local -a CleanArgv=("${(@)Args}")
+        eval "$(@arrays:removeIndices CleanArgv "${(@)DirtyArgs}")"
+        typeset -p1 CleanArgv
+}
+alias @args:parse="__@args:parse \"\${argv}\" "
+
+}
+
+: <<"DEPRICATED"
 emulate zsh -c '
 	autoload -Uz @tree:new 
 	autoload -Uz @iterators:arrays:asIterator
@@ -245,3 +476,4 @@ alias @args:parse="() { eval \$( __@args:parse \"\${argv}\" \"\$@\" ) } "
 	>>	1
 	%
 Test.Output
+DEPRICATED
