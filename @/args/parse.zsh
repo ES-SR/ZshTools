@@ -154,7 +154,7 @@ function @args:parse:specsParse {
         local Spec; for Spec {
                 local -a SpecParts=(${(s.:.)Spec})
 
-                local MaxVals="${${(M)Spec%:${~:-"(\*|<->)"}}#\:}"
+                local MaxVals="${${(M)Spec%:${~:-"(+|<->)"}}#\:}"
                 SpecParts=(${SpecParts:#$MaxVals})
                 local Name=${SpecParts[-1]}
 
@@ -234,7 +234,7 @@ function __@args:parse {
                         (( MatchCount++ ))
                         local -a PossibleArgs=(${(Pe):-"\$Args$((Match+1))"})
 
-                        SpecArr+=( ${PossibleArgs[1,${MaxVals/\*/${#PossibleArgs}}]} )
+                        SpecArr+=( ${PossibleArgs[1,${MaxVals/+/${#PossibleArgs}}]} )
                         DirtyArgs+=( {$Match..$((Match+${#SpecArr}))} )
                 }
                 if [[ $MaxVals == "Null" ]] {
@@ -290,7 +290,7 @@ alias @args:parse='. <(__@args:parse:bridge "${(@)argv}")'
 		}
 		function customFunc { print -l -- $@ }
 
-		@args:parse Help Debug Ping:2 HelloWorld:\* '(-|--|)Custom(Pattern|)':Custom:3
+		@args:parse Help Debug Ping:2 HelloWorld:+ '(-|--|)Custom(Pattern|)':Custom:3
 
 		print -P -- "%K{#0B5} %F{#111}${(l.(COLUMNS/2)-1..-.. .r.(COLUMNS/2)-1..-.. .):-"Metadata Arrays"}%f %k"
 
