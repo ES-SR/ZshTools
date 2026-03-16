@@ -271,13 +271,12 @@ function __@args:parse {
 	print -r -- "${Output/CleanArgv/-h argv}"
 	print -r -- "set -- $CleanArgv"
 }
-
 function __@args:parse:bridge {
 	emulate -L zsh
-
 	(( ARGC )) || { return }
-	local Args="${(@)argv}"
-	print -r -- "eval \"\$(__@args:parse \"${Args}\" \"\${(@)argv}\")\""
+
+	local PackedArgs="${argv}"
+	print -r -- "eval \"\$(__@args:parse \"${PackedArgs}\" \"\${(@)argv}\")\""
 }
 
 alias @args:parse='. <(__@args:parse:bridge "${(@)argv}")'
