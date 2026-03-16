@@ -276,7 +276,7 @@ function __@args:parse:bridge {
 	emulate -L zsh
 
 	(( ARGC )) || { return }
-	local Args="${argv}"
+	local Args="${(@)argv}"
 	print -r -- "eval \"\$(__@args:parse \"${Args}\" \"\${(@)argv}\")\""
 }
 
