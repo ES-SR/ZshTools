@@ -1,6 +1,8 @@
 
 () {
 
+local Alias=dr
+
 function @mounts:type {
 	emulate -L zsh; options[extendedglob]=on
 
@@ -11,7 +13,7 @@ function @mounts:type {
 	local TypePattern="(#i)(#s)(${(j.)|(.)Types})*"
 	local K V
 	for K V ( ${(kv)Mounts} ) {
-		if [[ ${V} = ${~TypePattern} ]] { #"nfs"<-> ]] {
+		if [[ ${V} = ${~TypePattern} ]] {
 			print -- $K
 		}
 	}
@@ -23,7 +25,7 @@ function __@sfx:recurse {
 	emulate -L zsh; setopt extendedglob typesetsilent
 
 	local -a RemoteDirRoots=($(@mounts:type nfs\[34\]))
-	local StartPath=${${1%.sfx}:-.}
+	local StartPath=${${1%.${Alias}}:-.}
 
 	@sfx:recurse ${StartPath}
 }
@@ -34,7 +36,7 @@ function @sfx:recurse {
 		__@sfx:recurse $@
 		return
 	}
-	local Path=${1%.sfx}
+	local Path=${1%.${Alias}}
 	Path=${Path//(#s).(#e)/$(pwd)}
 	print -- $Path
 	local -aU Children=(${Path:A}/*(N/F))
@@ -47,7 +49,7 @@ function @sfx:recurse {
 		@sfx:recurse ${Child:A}
 	}	
 }
-alias -s sfx=@sfx:recurse
+alias -s $Alias=@sfx:recurse
 
 }
 
