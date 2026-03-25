@@ -25,4 +25,4 @@ function @NULLCMD {
 	}
 }
 
-NULLCMD=@NULLCM
+NULLCMD=@NULLCMD
