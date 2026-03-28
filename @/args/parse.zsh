@@ -267,16 +267,14 @@ function __@args:parse {
 	for P1 P2 ( "${(@)SplitArgs}" ) {
 		CleanArgv=( "${(z@)${CleanArgv}/${P1} ${P2}/"${P1}=${P2}"}" )
 	}
-	local Output="$(typeset -p1 CleanArgv)"
-	print -r -- "${Output/CleanArgv/-h argv}"
-	print -r -- "set -- $CleanArgv"
+	typeset -p1 CleanArgv
 }
 function __@args:parse:bridge {
 	emulate -L zsh
 	(( ARGC )) || { return }
 
-	local PackedArgs="${argv}"
-	print -r -- "eval \"\$(__@args:parse \"${PackedArgs}\" \"\${(@)argv}\")\""
+	local PackedArgs="${(q)argv}"
+	print -r -- "eval \"\$(__@args:parse \"${(q)PackedArgs}\" \"\${(@)argv}\")\""
 }
 
 alias @args:parse='. <(__@args:parse:bridge "${(@)argv}")'
