@@ -82,10 +82,10 @@ function @arrays:slice {
 
 	local -A Modes=(
 		['+']=""
-		['-']=": \${IdxStart::=\$(( IdxStart=IdxStart+1 ))}; : \${IdxEnd::=\$(( IdxEnd=IdxEnd+1 ))}"
-		['_']=": \${IdxStart::=\$(( IdxStart=IdxStart+1 ))}"
+		['-']=": "$'\$'"{IdxStart::="$'\$'"(( IdxStart=IdxStart+1 ))}; : "$'\$'"{IdxEnd::="$'\$'"(( IdxEnd=IdxEnd+1 ))}"
+		['_']=": "$'\$'"{IdxStart::="$'\$'"(( IdxStart=IdxStart+1 ))}"
 	)
-	local Cmds=("${Modes[$Mode]}" ": \${(A)Slice::=\${Array[\$IdxStart, \$IdxEnd]}}")
+	local Cmds=("${Modes[$Mode]}" ": "$'\$'"{(A)Slice::="$'\$'"{Array["$'\$'"IdxStart, "$'\$'"IdxEnd]}}")
 
 	local -a argv=($(@arrays:indices:normalize $ARGC $argv))
 
@@ -95,7 +95,7 @@ function @arrays:slice {
 		(( IdxEnd = Idx - 1 ))
 		local -a Slice=()
 		${(ze)Cmds}
-		local Output="$(typeset -p1 Slice)"
+		local Output="$(typeset -p Slice)"
 		print ${Output/Slice/$ArrayName$IdxStart}
 
 		(( I++ ))
@@ -116,7 +116,7 @@ function @arrays:removeIndices {
 		Array[$Idx]=()
 	}
 
-	local Output="$(typeset -p1 Array)"
+	local Output="$(typeset -p Array)"
 	print -- ${Output/Array/$ArrayName}
 }
 
@@ -160,7 +160,7 @@ function @args:parse:specsParse {
 	for Spec {
 		local -a SpecParts=(${(s.:.)Spec})
 
-		local MaxVals="${${(M)Spec%:${~:-"(+|<->)"}}#\:}"
+		local MaxVals="${${(M)Spec%:${~:-"(+|<->)"}}#:}"
 		SpecParts=(${SpecParts:#$MaxVals})
 		local Name=${SpecParts[-1]}
 
@@ -207,7 +207,7 @@ function __@args:parse {
 
 	local -A Specs
 	eval "$(@args:parse:specsParse "${(@)argv}")"
-	typeset -p1 Specs
+	typeset -p Specs
 
 	local -A IndexedArgs
 	eval "$(@array:toAssoc IndexedArgs "${(@)Args}")"
@@ -224,30 +224,34 @@ function __@args:parse {
 		local -A SpecMatches=($(@args:parse:match IndexedArgs ${Pattern}))
 
 		Matches+=( [${Name}]=${(j.:.)${(k)SpecMatches}} )
-		local Output="$(typeset -p1 SpecMatches)"
+		local Output="$(typeset -p SpecMatches)"
 		print ${Output/SpecMatches/$Name}
 	}
 
 	local -aU DirtyArgs=(${(zs.:.)=Matches})
 	@arrays:slice Args _ "${(@)DirtyArgs}"
 	eval "$(@arrays:slice Args _ ${(zs.:.)=Matches})"
+	local -aU DirtyMatchIdxs=()
 	local SpecName=""
 	for SpecName ( ${(s.:.)Specs[Order]} ) {
 		local Pattern=""
 		local MaxVals=""
 		eval ${(s.:.)${Specs[$SpecName]}}
 		local -a SpecArr=()
+		local -a MatchIdxs=()
 		local -i MatchCount=0
 		local Match=""
 		for Match ( ${(s.:.)Matches[$SpecName]} ) {
+			MatchIdxs+=($Match)
 			(( MatchCount++ ))
-			local -a PossibleArgs=(${(Pe):-"\$Args$((Match+1))"})
+			local -a PossibleArgs=(${(Pe):-$'\$'"Args$((Match+1))"})
 			SpecArr+=( ${PossibleArgs[1,${MaxVals/+/${#PossibleArgs}}]} )
 			DirtyArgs+=( {$Match..$((Match+${#SpecArr}))} )
 		}
 		if [[ $MaxVals == "Null" ]] {
-			SpecArr+=($MatchCount)
+			SpecArr+=(${MatchIdxs:|DirtyMatchIdxs})
 		}
+		DirtyMatchIdxs+=($MatchIdxs)
 		local Output="$(typeset -p1 SpecArr)"
 		print -- ${Output//SpecArr/$SpecName}
 	}
@@ -267,72 +271,16 @@ function __@args:parse {
 	for P1 P2 ( "${(@)SplitArgs}" ) {
 		CleanArgv=( "${(z@)${CleanArgv}/${P1} ${P2}/"${P1}=${P2}"}" )
 	}
-	typeset -p1 CleanArgv
+	local Output="$(typeset -p1 CleanArgv)"
+	print -r -- "${Output/CleanArgv/Argv}"
 }
 function __@args:parse:bridge {
 	emulate -L zsh
 	(( ARGC )) || { return }
 
-	local PackedArgs="${(q)argv}"
-	print -r -- "eval \"\$(__@args:parse \"${(q)PackedArgs}\" \"\${(@)argv}\")\""
+	local PackedArgs="${(@q)argv}"
+	print -r -- "eval "$'\"\$'"(__@args:parse "$'\"'"${PackedArgs}"$'\"'" "$'\"\$'"{(@)argv}"$'\"'")"$'\"'
 }
 
 alias @args:parse='. <(__@args:parse:bridge "${(@)argv}")'
 }
-
-<<"Example@args:parse"
-	function test {
-		emulate -L zsh
-		zmodload zsh/nearcolor
-		
-		function __test:help {
-			cat<<-'__test:help.EOF'
-				this is just a function to test/demonstrate the arg parser
-				this version of the parser was written to be highly modular
-				and is therefore not the most efficient due to the number of
-				subshells used, the many eval, etc.
-
-				i may update this help text if it the function becomes a more
-				permanent example included with the parser.
-			__test:help.EOF
-		}
-		function customFunc { print -l -- $@ }
-
-		@args:parse Help Debug Ping:2 HelloWorld:+ '(-|--|)Custom(Pattern|)':Custom:3
-
-		print -P -- "%K{#0B5} %F{#111}${(l.(COLUMNS/2)-1..-.. .r.(COLUMNS/2)-1..-.. .):-"Metadata Arrays"}%f %k"
-
-		print -P -- "%F{cyan}${(l.10..-.)} ${(l.2.r.COLUMNS-13..-.. .):-"Specs"}%f"
-		print -l -- ${Specs}
-		print -P -- "%F{cyan}${(l.10..-.)} ${(l.6.r.COLUMNS-17..-.. .):-"OriginalArgs"}%f"
-		print -l -- ${OriginalArgs}
-		print -P -- "%F{cyan}${(l.10..-.)} ${(l.2.r.COLUMNS-13..-.. .):-"argv"}%f"
-		print -l -- "${(@)argv}"
-
-		print -P -- "%K{#0B5} %F{#111}${(l.(COLUMNS/2)-1..-.. .r.(COLUMNS/2)-1..-.. .):-"Spec Arrays"}%f %k"
-
-		print -P -- "%F{cyan}${(l.10..-.)} ${(l.2.r.COLUMNS-13..-.. .):-"Help"}%f"
-		print -l -- ${Help}
-		print -P -- "%F{cyan}${(l.10..-.)} ${(l.2.r.COLUMNS-13..-.. .):-"Debug"}%f"
-		print -l -- ${Debug}
-		print -P -- "%F{cyan}${(l.10..-.)} ${(l.2.r.COLUMNS-13..-.. .):-"Ping"}%f"
-		print -l -- ${Ping}
-		print -P -- "%F{cyan}${(l.10..-.)} ${(l.5.r.COLUMNS-16..-.. .):-"HelloWorld"}%f"
-		print -l -- ${HelloWorld}
-		print -P -- "%F{cyan}${(l.10..-.)} ${(l.3.r.COLUMNS-14..-.. .):-"Custom"}%f"
-		print -l -- ${Custom}
-
-		print -P -- "%K{#0B5} %F{#111}${(l.(COLUMNS/2)-1..-.. .r.(COLUMNS/2)-1..-.. .):-"Use the Parsed Args"}%f %k"
-
-		print -P -- "%K{blue}%F{white}${(l.10..-.)} ${(l.2.r.COLUMNS-13..-.. .):-"Help"}%f%k"
-		(( Help )) && { __test:help }
-		print -P -- "%K{blue}%F{white}${(l.10..-.)} ${(l.3.r.COLUMNS-14..-.. .):-"Custom"}%f%k"
-		(( ${#Custom} )) && { customFunc $Custom }
-		print -P -- "%K{blue}%F{white}${(l.10..-.)} ${(l.5.r.COLUMNS-16..-.. .):-"HelloWorld"}%f%k"
-		(( ${#HelloWorld} )) && { print -P -- %S%B%UHello World%u%b%s; print -- $HelloWorld }
-		print -P -- "%K{blue}%F{white}${(l.10..-.)} ${(l.2.r.COLUMNS-13..-.. .):-"Ping"}%f%k"
-		(( ${#Ping} )) && { ping -c ${Ping[2]:-4} ${Ping[1]:-1.1.1.1} }
-	}
-
-	Enterprise% test some initial arguments --ping 10.2.1.1 4 Custom 4 arguments go here -HW=this will collect all args untill the end or next help matched flag
-Example@args:parse
