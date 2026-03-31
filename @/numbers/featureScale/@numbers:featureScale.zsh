@@ -43,11 +43,15 @@ function @numbers:featureScale {
 		return 1
 	}
 
-	Numbers=(${(e):-"${(${Sort})Args}"})
+	Numbers=(${(e):-$'\$\{\('${Sort}$'\)Args\}'})
 	for N ( ${(a)Numbers} ) {
-		Normalized+=($(( A + ( (N-Min)*(B-A) / (Max-Min) ) )))
+		# multiply by 1. to force a float value
+		Normalized+=($(( A + ( 1.0 * (N-Min) * (B-A) / (Max-Min) ) )))
 	}
-	: <<< "TODO:add flag to output orginal and new values (output used while developing function)"
+	# if neither A nor B have a decimal, use rint to get integer value
+	# this provides properly rounded output instead of trucation when all args are ints
+	[[ -z "${(M)A%.*}${(M)B%.*}" ]] && {
+		Normalized=(${Normalized//(#m)(<->.(<->|))/${$(( rint(MATCH) ))%.}})
+	}
 	print -- $Normalized
 }
-
