@@ -4,7 +4,7 @@ function @read {
 	if ! [[ -p /dev/stdin ]] { return 1 }
 
 	@args:parse MaxEmptyReads:1 Timeout:1 OutDelimiter:+ InDelimiter:+
-	set -- "${(@)ParsedArgv}"
+	set -- "${(@)Argv}"
 
 	local -F Timeout=${${Timeout[1]}:-0.2}
 
@@ -12,7 +12,7 @@ function @read {
 	(( ${#InDelims} )) || InDelims=( "{}" )
 	local -a OutDelims=( "${(@)OutDelimiter}" )
 	OutDelims=( "${(@)OutDelims:#}" )
-	(( ${#OutDelims} )) || OutDelims=( "{} " )
+	(( ${#OutDelims} )) || OutDelims=( "{}" )
 	local -A Delims=( "${(@)InDelims:^^OutDelims}" )
 	local -A StarDelims=( "${(@)${(@)InDelims//(#m)(*)/"*${MATCH}*"}:^^OutDelims}" )
 
@@ -20,79 +20,64 @@ function @read {
 	local -i GrpWidth=${(c)#GrpBase}
 
 	local -i RegionCount=${${MaxEmptyReads[1]}:-4}
-	local -i RegionSize=$(( (60. - RegionCount) / RegionCount ))
+	local -i RegionSize=$(( (60. - RegionCount) / RegionCount > 1 ? (60. - RegionCount) / RegionCount : 1 ))
 
 	local -i2 LevelMask=$(( 2**RegionCount - 1 ))
-	local -i2 RegionMask=$(( 2**RegionSize - 1 ))
+	local -i2 CounterUnit=$(( 2**(RegionSize - 1) - 1 ))
+	local -i2 RegionComb=$(( (2**(RegionSize * RegionCount) - 1) / (2**RegionSize - 1) ))
+	local -i2 CounterMasks=$(( RegionComb * CounterUnit << RegionCount ))
+	local -i2 MarkerMask=$(( RegionComb << (RegionCount + RegionSize - 1) ))
 
-	local -a RegionOffsets=(0 {$RegionCount..$(( RegionSize*RegionCount - 1 ))..$RegionSize})
-	local -a RegionOffsetIdxs=(0)
+	local -a LevelKeys=( {1..$RegionCount} )
+	LevelKeys=( ${(@)LevelKeys//(#m)*/$(( 2**MATCH - 1 ))} )
 
-	local -i2 FullDecayMask=0 M=0
-	local -i R
-	for R ( {1..$RegionCount} ) {
-		RegionOffsetIdxs+=( $(( M = (M << 1) + 1 )) )
-
-		(( FullDecayMask |= (RegionMask >> 1) << RegionOffsets[R] ))
-	}
-
-	local -a Buffer=()
-	local -i2 ReadState=0 LevelBits RegionBits NewLevelBits
-	local -i RegionOffsetIdx RegionOffset
+	local BuffStr="" ID=""
+	local -a MatchStarts=() MatchEnds=() DelimGroupIDs=()
+	local -i2 ReadState=0 LevelBits NewLevelBits Marker Hist ProtectMask
+	local -i RegionIdx RegionOffset GID FirstIdx MBegin MEnd
 
 	while (( ReadState >= 0 )) {
-		(( LevelBits = ReadState & LevelMask ))
-		RegionOffsetIdx=$RegionOffsetIdxs[(I)$(( LevelBits ))]
-		(( RegionOffset = RegionOffsets[RegionOffsetIdx] ))
-		(( RegionBits = ( ( ReadState & ( ~ LevelMask ) ) & ( RegionMask << RegionOffset ) ) >> RegionOffset ))
-
 		local Char=""; local -i ReadRes=1
 		IFS= read -u 0 -t ${Timeout} -k 1 -rs Char
 		(( ReadRes = $? ))
 
+		(( LevelBits = ReadState & LevelMask ))
 		(( ReadRes )) && {
-			(( NewLevelBits = LevelBits << 1 | 1 ))
-		} || {
-			(( NewLevelBits = 0 ))
-
-			(( RegionOffsetIdx )) && {
-				(( ReadState = (ReadState >> 1) & (FullDecayMask ^ (RegionMask << RegionOffset)) ))
-			} || {
-				(( ReadState = (ReadState >> 1) & FullDecayMask ))
-			}
-			(( ReadState |= ( ( RegionBits << 1 | 1 ) & RegionMask ) << RegionOffset ))
-
-			Buffer+=("${Char}")
-			local BuffStr="${(j..)Buffer}"
-			local -a MatchStarts=()
-			local ID="" FirstID="" FirstDelim=""
-
-			while {
-				MatchStarts=()
-				for ID ( ${(@)${(@)${(@k)StarDelims[(K)${BuffStr}]}#\*}%\*} ) {
-					: "${BuffStr/(#m)${~ID}/${MatchStarts[$(( MBEGIN << GrpWidth | ${InDelims[(ie)${ID}]} ))]::="${(q+)ID}"}}"
-				}
-				(( ${#MatchStarts} ))
-			} {
-				FirstID="${(Q)${MatchStarts[(r)?*]}}"
-				FirstDelim="${(M)BuffStr#*${~FirstID}}"
-				[[ -n ${FirstDelim} ]] || { break }
-				BuffStr="${BuffStr#*${~FirstID}}"
-				print -nr -- "${FirstDelim/(#m)${~FirstID}/"${Delims[${FirstID}]//\{\{*\}\}/${MATCH}}"}"
-			}
-			Buffer=(${(s..)BuffStr})
+			(( ReadState = (NewLevelBits = LevelBits << 1 | 1) > LevelMask ? ~ ReadState : ReadState & ~ LevelMask | NewLevelBits ))
+			continue
 		}
 
-		(( NewLevelBits > LevelMask )) && {
-			(( ReadState = ~ ReadState ))
-		} || {
-			(( ReadState = ( ReadState & ( ~ LevelMask ) ) | ( NewLevelBits & LevelMask ) ))
+		RegionIdx=$LevelKeys[(I)$(( LevelBits ))]
+		((
+			RegionOffset = RegionCount + (RegionIdx - 1) * RegionSize,
+			Marker = ReadState & MarkerMask,
+			Hist = ReadState & CounterMasks,
+			ProtectMask = RegionIdx ? CounterUnit << RegionOffset : (Marker >> (RegionSize - 1)) * CounterUnit,
+			ReadState = ((Hist & ~ ProtectMask) >> 1) & CounterMasks
+				| Hist & ProtectMask
+				| (RegionIdx ? ((((Hist >> RegionOffset) & CounterUnit) << 1 | 1) & CounterUnit) << RegionOffset
+					| 1 << (RegionOffset + RegionSize - 1)
+					: Marker)
+		))
+
+		BuffStr+="${Char}"
+
+		while {
+			MatchStarts=() MatchEnds=() DelimGroupIDs=()
+			: "${(@)${(@)${(@)${(@k)StarDelims[(K)${BuffStr}]}#\*}%\*}//(#m)*/${ID::="${MATCH}"}${GID::="${InDelims[(ie)${ID}]}"}${ID:+${BuffStr//(#m)${~ID}/${MBEGIN:+${MatchStarts[$(( MBEGIN << GrpWidth | GID ))]::="${MBEGIN}"}${MatchEnds[$(( MBEGIN << GrpWidth | GID ))]::="${MEND}"}${DelimGroupIDs[$(( MBEGIN << GrpWidth | GID ))]::="${GID}"}}}}}"
+			(( ${#MatchStarts} ))
+		} {
+			FirstIdx=${MatchStarts[(i)?*]}
+			(( MBegin = MatchStarts[FirstIdx], MEnd = MatchEnds[FirstIdx], GID = DelimGroupIDs[FirstIdx] ))
+			(( MEnd >= MBegin )) || { break }
+			print -nr -- "${BuffStr[1,MBegin-1]}${Delims[${InDelims[GID]}]//\{\{*\}\}/${BuffStr[MBegin,MEnd]}}"
+			BuffStr="${BuffStr[MEnd+1,-1]}"
 		}
 	}
 	##common pattern i use
-	#print -nr -- ${Buffer:+"${(j..)Buffer}"$'\n'}
+	#print -nr -- ${BuffStr:+"${BuffStr}"$'\n'}
 	##allows print -n like in the example to prevent a new line in the output
-	print -nr -- ${Buffer:+"${(j..)Buffer}"}
+	print -nr -- ${BuffStr:+"${BuffStr}"}
 }
 
 : <<"Examples.@read"
@@ -102,6 +87,7 @@ function @read {
 			print -nl -- {} hello {} world | @read outdelimiter '<{}>'
 			print
 			print -- a1b2c3 | @read -ID '<->' '[a-z]' -OD '({{}})' '[{{}}]'
+			print -- 'one,two;three' | @read ',' ';'
 		} always {
 			set +x
 		}
