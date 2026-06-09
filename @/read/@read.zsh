@@ -33,8 +33,8 @@ function @read {
 
 	local BuffStr="" ID=""
 	local -a MatchStarts=() MatchEnds=() DelimGroupIDs=()
-	local -i2 ReadState=0 LevelBits NewLevelBits Marker Hist ProtectMask
-	local -i RegionIdx RegionOffset GID FirstIdx MBegin MEnd
+	local -i2 ReadState=0 LevelBits NewLevelBits Marker Hist ProtectMask GID
+	local -i RegionIdx RegionOffset FirstIdx MBegin MEnd
 
 	while (( ReadState >= 0 )) {
 		local Char=""; local -i ReadRes=1
