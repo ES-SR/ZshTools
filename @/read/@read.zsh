@@ -59,8 +59,8 @@ function @read {
 	Exponents=( $(@numbers:featureScale 0.01,0.99 ${(@)Exponents}) )
 	local -i TL TS
 	for TL ( {1..$RegionCount} ) {
-		for TS ( {1..$(( RegionSize < 16 ? RegionSize : 16 ))} ) {
-			TimeoutArr[$(( 2**TS + TL ))]=$(( (1. * BaseTimeout * (RegionCount - TL + 1) / RegionCount) ** (1 - Exponents[TS + 1]) ))
+		for TS ( {1..$RegionSize} ) {
+			TimeoutArr[$(( 2*TS + TL ))]=$(( (1. * BaseTimeout * (RegionCount - TL + 1) / RegionCount) ** (1 - Exponents[TS + 1]) ))
 		}
 	}
 
