@@ -53,5 +53,6 @@ function @numbers:featureScale {
 	[[ -z "${(M)A%.*}${(M)B%.*}" ]] && {
 		Normalized=(${Normalized//(#m)(<->.(<->|))/${$(( rint(MATCH) ))%.}})
 	}
+	: <<< "TODO:add flag to output orginal and new values (output used while developing function)"
 	print -- $Normalized
 }
