@@ -55,11 +55,12 @@ function @read {
 	local -a RegionOffsets=( {$RegionCount..$(( RegionSize*RegionCount - 1 ))..$RegionSize} )
 
 	local -a TimeoutArr=()
-	local -a TSNorm=( $(@numbers:featureScale 1.,$(( 1. * RegionCount )) {1..$RegionSize}) )
+	local -a Exponents=( ${${:-{0..$RegionSize}}//(#m)*/$(( 1. * MATCH / RegionCount ))} )
+	Exponents=( $(@numbers:featureScale 0.01,0.99 ${(@)Exponents}) )
 	local -i TL TS
 	for TL ( {1..$RegionCount} ) {
 		for TS ( {1..$RegionSize} ) {
-			TimeoutArr[$(( 2**TS + TL ))]=$(( (1. * BaseTimeout * TL / RegionCount) ** (1 - (1. * TSNorm[TS] / RegionCount)) ))
+			TimeoutArr[$(( 2**TS + TL ))]=$(( (1. * BaseTimeout * (RegionCount - TL + 1) / RegionCount) ** (1 - Exponents[TS + 1]) ))
 		}
 	}
 
