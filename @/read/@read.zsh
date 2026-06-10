@@ -5,18 +5,37 @@ function @read {
 
 	@args:parse MaxEmptyReads:1 Timeout:1 OutDelimiter:+ InDelimiter:+
 	set -- "${(@)Argv}"
+	argv=( ${(@)argv:#} )
 
 	local -F Timeout=${${Timeout[1]}:-0.2}
 
-	local -a InDelims=( "${(@)${(@)InDelimiter:-${(@)argv}}:#}" )
-	(( ${#InDelims} )) || InDelims=( "{}" )
-	local -a OutDelims=( "${(@)OutDelimiter}" )
-	OutDelims=( "${(@)OutDelims:#}" )
-	(( ${#OutDelims} )) || OutDelims=( "{}" )
-	local -A Delims=( "${(@)InDelims:^^OutDelims}" )
-	local -A StarDelims=( "${(@)${(@)InDelims//(#m)(*)/"*${MATCH}*"}:^^OutDelims}" )
+	local -a DelimGroups=( ${(s. , .)${argv:+${(q+)=argv}}} )
+	(( ${#DelimGroups} )) || {
+		local -a InD=( "${(@)InDelimiter}" ) OutD=( "${(@)OutDelimiter}" )
+		InD=( "${(@)InD:#}" ) OutD=( "${(@)OutD:#}" )
+		(( ${#InD} )) || InD=( "{}" )
+		(( ${#OutD} )) || OutD=( "{}" )
+		local -i I=0
+		local Pat=""
+		for Pat ( "${(@)InD}" ) {
+			DelimGroups+=( "${(q+)Pat} ${(q+)${OutD[$(( I++ % ${#OutD} + 1 ))]}}" )
+		}
+	}
 
-	local -i2 GrpBase=${#InDelims}
+	local -a InDelims=() OutDelims=()
+	local -A StarDelims=()
+	local -i I=0
+	local Grp=""
+	for Grp ( ${(@)DelimGroups} ) {
+		local -a GrpWords=( "${(@Q)${(z)Grp}}" )
+		(( ${#GrpWords} > 1 )) || GrpWords+=( "{}" )
+		InDelims[$(( 1 << I ))]="(${(j.|.)GrpWords[1,-2]})"
+		OutDelims[$(( 1 << I ))]="${GrpWords[-1]}"
+		StarDelims+=( "*(${(j.|.)GrpWords[1,-2]})*" "$(( [#2] 1 << I ))" )
+		(( I++ ))
+	}
+
+	local -i2 GrpBase=$(( 1 << (${#DelimGroups} - 1) ))
 	local -i GrpWidth=${(c)#GrpBase}
 
 	local -i RegionCount=${${MaxEmptyReads[1]}:-4}
@@ -64,13 +83,13 @@ function @read {
 
 		while {
 			MatchStarts=() MatchEnds=() DelimGroupIDs=()
-			: "${(@)${(@)${(@)${(@k)StarDelims[(K)${BuffStr}]}#\*}%\*}//(#m)*/${ID::="${MATCH}"}${GID::="${InDelims[(ie)${ID}]}"}${ID:+${BuffStr//(#m)${~ID}/${MBEGIN:+${MatchStarts[$(( MBEGIN << GrpWidth | GID ))]::="${MBEGIN}"}${MatchEnds[$(( MBEGIN << GrpWidth | GID ))]::="${MEND}"}${DelimGroupIDs[$(( MBEGIN << GrpWidth | GID ))]::="${GID}"}}}}}"
+			: "${(@)StarDelims[(K)${BuffStr}]//(#m)*/${GID::=${MATCH}}${ID::=${InDelims[$GID]}}${ID:+${BuffStr//(#m)${~ID}/${MATCH:+${MatchStarts[$(( MBEGIN << GrpWidth | GID ))]::="${MBEGIN}"}${MatchEnds[$(( MBEGIN << GrpWidth | GID ))]::="${MEND}"}${DelimGroupIDs[$(( MBEGIN << GrpWidth | GID ))]::="${GID}"}}}}}"
 			(( ${#MatchStarts} ))
 		} {
 			FirstIdx=${MatchStarts[(i)?*]}
 			(( MBegin = MatchStarts[FirstIdx], MEnd = MatchEnds[FirstIdx], GID = DelimGroupIDs[FirstIdx] ))
 			(( MEnd >= MBegin )) || { break }
-			print -nr -- "${BuffStr[1,MBegin-1]}${Delims[${InDelims[GID]}]//\{\{*\}\}/${BuffStr[MBegin,MEnd]}}"
+			print -nr -- "${BuffStr[1,MBegin-1]}${OutDelims[GID]//\{\{*\}\}/${BuffStr[MBegin,MEnd]}}"
 			BuffStr="${BuffStr[MEnd+1,-1]}"
 		}
 	}
@@ -87,7 +106,8 @@ function @read {
 			print -nl -- {} hello {} world | @read outdelimiter '<{}>'
 			print
 			print -- a1b2c3 | @read -ID '<->' '[a-z]' -OD '({{}})' '[{{}}]'
-			print -- 'one,two;three' | @read ',' ';'
+			print -- 'one,two;three' | @read ',' ';' '|'
+			print -- 'Some (432) input TO 23321 read.' | @read '[[:digit:]]##' '<N:{{}}>' , '[[:punct:]]##' '<P>'
 		} always {
 			set +x
 		}
