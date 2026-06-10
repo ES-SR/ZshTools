@@ -7,14 +7,11 @@ function @read {
 
 	local -a PrintOpts=("${(@)PrintOptsIdxs//(#m)*/${(P)MATCH}}")
 
-	set -- "${(@)Argv}"
-	argv=( ${(@)argv:#} )
-
 	local -i MaxBufferSize=${${MaxBufferSize[1]}:-4096}
 	local -F BaseTimeout=${${Timeout[1]}:-0.2}
 	local -F Timeout=${BaseTimeout}
 
-	local -a DelimGroups=( ${(s. , .)${argv:+${(q+)=argv}}} )
+	local -a DelimGroups=( ${(s. , .)${Argv:+${(q+)=Argv}}} )
 	(( ${#DelimGroups} )) || {
 		DelimGroups=( "${(q+s..)IFS} {}" )
 	}
@@ -22,14 +19,14 @@ function @read {
 	local -a InDelims=() OutDelims=()
 	local -A StarDelims=()
 	local Grp=""
-	local -i I=0
+	local -i2 I=0
 	for Grp ( ${(@)DelimGroups} ) {
 		(( I++ ))
 		local -a GrpWords=( "${(@Q)${(z)Grp}}" )
 		(( ${#GrpWords} > 1 )) || GrpWords+=( "{}" )
-		InDelims[$(( [#2] I ))]="(${(j.|.)GrpWords[1,-2]})"
-		OutDelims[$(( [#2] I ))]="${GrpWords[-1]}"
-		StarDelims+=( "*(${(j.|.)GrpWords[1,-2]})*" "$(( [#2] I ))" )
+		InDelims[$I]="(${(j.|.)GrpWords[1,-2]})"
+		OutDelims[$I]="${GrpWords[-1]}"
+		StarDelims+=( "*(${(j.|.)GrpWords[1,-2]})*" "$I" )
 	}
 	local -i ShiftWidth=${(c)#$(( [##2] I ))}
 
@@ -56,9 +53,7 @@ function @read {
 	}
 
 	local BuffStr="" ID="" MB="" ME=""
-	local -a Starts=() Ends=() DelimGrps=() Lens=() Content=()
-	local -T __Idxs Idxs
-	__Idxs=""
+	local -T __Idxs="" Idxs
 	local -i2 ReadState=0 LevelBits NewLevelBits Marker Hist ProtectMask DG
 	local -i RegionIdx RegionOffset HistCount Idx FirstIdx
 
@@ -94,7 +89,8 @@ function @read {
 		BuffStr+="${Char}"
 
 		while {
-			Starts=() Ends=() DelimGrps=() Lens=() Content=() __Idxs=""
+			local -a Starts=() Ends=() DelimGrps=() Lens=() Content=()
+			__Idxs=""
 			: "${(@)StarDelims[(K)${BuffStr}]//(#m)*/${DG::=${MATCH}}${ID::=${InDelims[$DG]}}${ID:+${BuffStr//(#m)${~ID}/${MATCH:+${MB::=$(( MBEGIN ))}${ME::=$(( MEND ))}${Idx::=$(( (MB << ShiftWidth) | DG ))}${Starts[$Idx]::=${MB}}${Ends[$Idx]::=${ME}}${DelimGrps[$Idx]::=${DG}}${Lens[$Idx]::=$(( ME - MB ))}${Content[$Idx]::="${MATCH}"}${__Idxs::=${__Idxs:+${__Idxs}:}${Idx}}}}}}"
 			(( ${#Starts} ))
 		} {
