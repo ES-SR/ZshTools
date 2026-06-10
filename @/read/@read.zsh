@@ -51,7 +51,7 @@ function @read {
 	(( CounterUnit = RegionMask >> 1	, CounterMasks = RegionComb * CounterUnit << RegionCount ))
 	(( MarkerMask = RegionComb << (RegionCount + RegionSize - 1) ))
 
-	local -a LevelKeys=( ${${(e):-{1..$RegionCount}}//(#m)*/$(( 2**MATCH - 1 ))} )
+	local -a LevelKeys=( ${${(e):-{1..$RegionCount}}//(#m)*/$(( [#2] 2**MATCH - 1 ))} )
 	local -a RegionOffsets=( {$RegionCount..$(( RegionSize*RegionCount - 1 ))..$RegionSize} )
 
 	local -a TimeoutArr=()
@@ -71,7 +71,7 @@ function @read {
 
 	while (( ReadState >= 0 )) {
 		(( LevelBits = ReadState & LevelMask ))
-		RegionIdx=$LevelKeys[(I)$(( LevelBits ))]
+		RegionIdx=$LevelKeys[(Ie)$LevelBits]
 		((
 			RegionOffset = RegionOffsets[RegionIdx] ,
 			HistCount = (ReadState >> RegionOffset) & CounterUnit
