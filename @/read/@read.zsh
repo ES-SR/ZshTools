@@ -3,7 +3,10 @@ function @read {
 	emulate -L zsh; setopt extendedglob typesetsilent
 	if ! [[ -p /dev/stdin ]] { return 1 }
 
-	@args:parse MaxEmptyReads:1 MaxBufferSize:1 Timeout:1 OutDelimiter:+ InDelimiter:+
+	@args:parse MaxEmptyReads:1 MaxBufferSize:1 Timeout:1 '-[abcCDfilmnNoOPRrsSuXxz](*|)':PrintOptsIdxs
+
+	local -a PrintOpts=("${(@)PrintOptsIdxs//(#m)*/${(P)MATCH}}")
+
 	set -- "${(@)Argv}"
 	argv=( ${(@)argv:#} )
 
@@ -12,26 +15,14 @@ function @read {
 	local -F Timeout=${BaseTimeout}
 
 	local -a DelimGroups=( ${(s. , .)${argv:+${(q+)=argv}}} )
-	local -i I=0
 	(( ${#DelimGroups} )) || {
-		local -a InD=( "${(@)InDelimiter}" ) OutD=( "${(@)OutDelimiter}" )
-		InD=( "${(@)InD:#}" ) OutD=( "${(@)OutD:#}" )
-		(( ${#InD} + ${#OutD} )) && {
-			(( ${#InD} )) || InD=( "{}" )
-			(( ${#OutD} )) || OutD=( "{}" )
-			local Pat=""
-			for Pat ( "${(@)InD}" ) {
-				DelimGroups+=( "${(q+)Pat} ${(q+)${OutD[$(( I++ % ${#OutD} + 1 ))]}}" )
-			}
-		} || {
-			DelimGroups=( "${(q+s..)IFS} {}" )
-		}
+		DelimGroups=( "${(q+s..)IFS} {}" )
 	}
 
 	local -a InDelims=() OutDelims=()
 	local -A StarDelims=()
 	local Grp=""
-	I=0
+	local -i I=0
 	for Grp ( ${(@)DelimGroups} ) {
 		(( I++ ))
 		local -a GrpWords=( "${(@Q)${(z)Grp}}" )
@@ -64,12 +55,12 @@ function @read {
 		}
 	}
 
-	local BuffStr="" ID="" DG="" MB="" ME=""
+	local BuffStr="" ID="" MB="" ME=""
 	local -a Starts=() Ends=() DelimGrps=() Lens=() Content=()
 	local -T __Idxs Idxs
 	__Idxs=""
-	local -i2 ReadState=0 LevelBits NewLevelBits Marker Hist ProtectMask GID
-	local -i RegionIdx RegionOffset HistCount Idx FirstIdx MBegin MEnd Draining=0
+	local -i2 ReadState=0 LevelBits NewLevelBits Marker Hist ProtectMask DG
+	local -i RegionIdx RegionOffset HistCount Idx FirstIdx
 
 	while (( ReadState >= 0 )) {
 		(( LevelBits = ReadState & LevelMask ))
@@ -86,22 +77,21 @@ function @read {
 
 		(( ReadRes )) && {
 			(( ReadState = (NewLevelBits = LevelBits << 1 | 1) > LevelMask ? ~ ReadState : ReadState & ~ LevelMask | NewLevelBits ))
-			(( ReadState >= 0 )) && { continue }
-			(( Draining = 1 ))
-		} || {
-			((
-				Marker = ReadState & MarkerMask ,
-				Hist = ReadState & CounterMasks ,
-				ProtectMask = RegionOffset ? CounterUnit << RegionOffset : (Marker >> (RegionSize - 1)) * CounterUnit ,
-				ReadState = ((Hist & ~ ProtectMask) >> 1) & CounterMasks
-					| Hist & ProtectMask
-					| (RegionOffset ? ((HistCount << 1 | 1) & CounterUnit) << RegionOffset
-						| 1 << (RegionOffset + RegionSize - 1)
-						: Marker)
-			))
-
-			BuffStr+="${Char}"
+			continue
 		}
+
+		((
+			Marker = ReadState & MarkerMask ,
+			Hist = ReadState & CounterMasks ,
+			ProtectMask = RegionOffset ? CounterUnit << RegionOffset : (Marker >> (RegionSize - 1)) * CounterUnit ,
+			ReadState = ((Hist & ~ ProtectMask) >> 1) & CounterMasks
+				| Hist & ProtectMask
+				| (RegionOffset ? ((HistCount << 1 | 1) & CounterUnit) << RegionOffset
+					| 1 << (RegionOffset + RegionSize - 1)
+					: Marker)
+		))
+
+		BuffStr+="${Char}"
 
 		while {
 			Starts=() Ends=() DelimGrps=() Lens=() Content=() __Idxs=""
@@ -109,28 +99,27 @@ function @read {
 			(( ${#Starts} ))
 		} {
 			FirstIdx=${Starts[(i)?*]}
-			(( MBegin = Starts[FirstIdx], MEnd = Ends[FirstIdx], GID = DelimGrps[FirstIdx] ))
-			(( MEnd >= MBegin )) || { break }
-			(( Draining || MEnd < ${#BuffStr} || ${#BuffStr} >= MaxBufferSize )) || { break }
-			print -nr -- "${BuffStr[1,MBegin-1]}${OutDelims[GID]//\{\{*\}\}/${Content[$FirstIdx]}}"
-			BuffStr="${BuffStr[MEnd+1,-1]}"
+			(( MB = Starts[FirstIdx], ME = Ends[FirstIdx], DG = DelimGrps[FirstIdx] ))
+			(( ME >= MB )) || { break }
+			(( ME < ${#BuffStr} || ${#BuffStr} >= MaxBufferSize )) || { break }
+			print -n ${(z)=PrintOpts} -- "${BuffStr[1,MB-1]}${OutDelims[$DG]//\{\{*\}\}/${Content[$FirstIdx]}}"
+			BuffStr="${BuffStr[ME+1,-1]}"
 		}
 	}
-	##common pattern i use
-	#print -nr -- ${BuffStr:+"${BuffStr}"$'\n'}
-	##allows print -n like in the example to prevent a new line in the output
-	print -nr -- ${BuffStr:+"${BuffStr}"}
+
+	(( ${#BuffStr} )) && {
+		print ${(z)PrintOpts} -- "${BuffStr}"
+	}
 }
 
 : <<"Examples.@read"
 	() {
 		{
 		#	set -x
-			print -nl -- {} hello {} world | @read outdelimiter '<{}>'
+			print -- a1b2c3 | @read -n '<->' '({{}})' , '[a-z]' '[{{}}]'
 			print
-			print -- a1b2c3 | @read -ID '<->' '[a-z]' -OD '({{}})' '[{{}}]'
-			print -- 'one,two;three' | @read ',' ';' '|'
 			print -- 'Some (432) input TO 23321 read.' | @read '[[:digit:]][[:digit:]]#' '<N:{{}}>' , '[[:punct:]][[:punct:]]#' '<P>'
+			print -- 'one,two;three' | @read ',' ';' '|'
 			print -- words split on whitespace | @read
 		} always {
 			set +x
