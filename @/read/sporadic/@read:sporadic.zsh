@@ -10,7 +10,7 @@ function @read:sporadic {
     Delays=(${Delays//(#m)*/$((MATCH / 10.))})
     local -i DelaysIdx=1
  
-    set -- "${(@)ParsedArgv}"
+    set -- "${(@)Argv}"
  
     local -i MaxEmptyReads=${${MaxEmptyReads[1]}:-4}
     local -F Timeout=${${Timeout[1]}:-0.2}

@@ -2,10 +2,11 @@
 function @numbers:random:range {
 	emulate -L zsh; setopt extendedglob typesetsilent
 
-	local -i RangeIdx=${argv[(I)(-|)([0-9.]##|)[,](-|)([0-9.]##|)]}
-	local -a Range=( 0 255 )
+	local -i Low=0 High=255 RangeIdx=${argv[(I)((-|)<->|)[,]((-|)<->|)]}
 	(( $RangeIdx )) && {
-		Range=(${(-s.,.)${(P)RangeIdx}})
+		local -a Range=(${(-)${(s.,.)${(P)RangeIdx}}})
+		Low=${Range[1]:-$Low}
+		High=${Range[2]:-$High}
 		argv[$RangeIdx]=()
 	}
 
@@ -15,10 +16,9 @@ function @numbers:random:range {
 	RANDOM=$(od -An -N1 -tu1 /dev/urandom)
 
 	while (( Count )) {
-		Numbers+=$(( RANDOM % (Range[2] - Range[1] + 1) + 1 ))
+		Numbers+=$(( RANDOM % (High - Low + 1) + Low ))
 		(( Count-- ))
 	}
 
-	print -- $Numbers
+	print -l -- $Numbers
 }
-
