@@ -71,8 +71,8 @@ function @read {
 
 	while (( ReadState >= 0 )) {
 		(( LevelBits = ReadState & LevelMask ))
-		RegionIdx=$LevelKeys[(Ie)$LevelBits]
 		((
+			RegionIdx = ${LevelKeys[(Ie)${LevelBits}]:-0} ,
 			RegionOffset = RegionOffsets[RegionIdx] ,
 			HistCount = (ReadState >> RegionOffset) & CounterUnit
 		))
