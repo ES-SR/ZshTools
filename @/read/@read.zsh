@@ -53,7 +53,7 @@ function @read {
 	local BuffStr="" ID=""
 	local -a MatchStarts=() MatchEnds=() DelimGroupIDs=()
 	local -i2 ReadState=0 LevelBits NewLevelBits Marker Hist ProtectMask GID
-	local -i RegionIdx RegionOffset FirstIdx MBegin MEnd
+	local -i RegionIdx RegionOffset FirstIdx MBegin MEnd Draining=0
 
 	while (( ReadState >= 0 )) {
 		local Char=""; local -i ReadRes=1
@@ -63,23 +63,24 @@ function @read {
 		(( LevelBits = ReadState & LevelMask ))
 		(( ReadRes )) && {
 			(( ReadState = (NewLevelBits = LevelBits << 1 | 1) > LevelMask ? ~ ReadState : ReadState & ~ LevelMask | NewLevelBits ))
-			continue
+			(( ReadState >= 0 )) && { continue }
+			(( Draining = 1 ))
+		} || {
+			RegionIdx=$LevelKeys[(I)$(( LevelBits ))]
+			((
+				RegionOffset = RegionCount + (RegionIdx - 1) * RegionSize,
+				Marker = ReadState & MarkerMask,
+				Hist = ReadState & CounterMasks,
+				ProtectMask = RegionIdx ? CounterUnit << RegionOffset : (Marker >> (RegionSize - 1)) * CounterUnit,
+				ReadState = ((Hist & ~ ProtectMask) >> 1) & CounterMasks
+					| Hist & ProtectMask
+					| (RegionIdx ? ((((Hist >> RegionOffset) & CounterUnit) << 1 | 1) & CounterUnit) << RegionOffset
+						| 1 << (RegionOffset + RegionSize - 1)
+						: Marker)
+			))
+
+			BuffStr+="${Char}"
 		}
-
-		RegionIdx=$LevelKeys[(I)$(( LevelBits ))]
-		((
-			RegionOffset = RegionCount + (RegionIdx - 1) * RegionSize,
-			Marker = ReadState & MarkerMask,
-			Hist = ReadState & CounterMasks,
-			ProtectMask = RegionIdx ? CounterUnit << RegionOffset : (Marker >> (RegionSize - 1)) * CounterUnit,
-			ReadState = ((Hist & ~ ProtectMask) >> 1) & CounterMasks
-				| Hist & ProtectMask
-				| (RegionIdx ? ((((Hist >> RegionOffset) & CounterUnit) << 1 | 1) & CounterUnit) << RegionOffset
-					| 1 << (RegionOffset + RegionSize - 1)
-					: Marker)
-		))
-
-		BuffStr+="${Char}"
 
 		while {
 			MatchStarts=() MatchEnds=() DelimGroupIDs=()
@@ -89,6 +90,7 @@ function @read {
 			FirstIdx=${MatchStarts[(i)?*]}
 			(( MBegin = MatchStarts[FirstIdx], MEnd = MatchEnds[FirstIdx], GID = DelimGroupIDs[FirstIdx] ))
 			(( MEnd >= MBegin )) || { break }
+			(( Draining || MEnd < ${#BuffStr} )) || { break }
 			print -nr -- "${BuffStr[1,MBegin-1]}${OutDelims[GID]//\{\{*\}\}/${BuffStr[MBegin,MEnd]}}"
 			BuffStr="${BuffStr[MEnd+1,-1]}"
 		}
