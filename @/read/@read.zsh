@@ -58,7 +58,7 @@ function @read {
 	local BuffStr="" ID="" MB="" ME=""
 	local -T __Idxs="" Idxs
 	local -i2 ReadState=0 LevelBits NewLevelBits Marker Hist ProtectMask DG HistCount
-	local -i RegionIdx RegionOffset Idx FirstIdx
+	local -i RegionIdx RegionOffset Idx
 
 	while (( ReadState >= 0 )) {
 		(( LevelBits = ReadState & LevelMask ))
@@ -91,18 +91,16 @@ function @read {
 
 		BuffStr+="${Char}"
 
-		while {
-			local -a Starts=() Ends=() DelimGrps=() Lens=() Content=()
-			__Idxs=""
-			: "${(@)StarDelims[(K)${BuffStr}]//(#m)*/${DG::=${MATCH}}${ID::=${InDelims[$DG]}}${ID:+${BuffStr//(#m)${~ID}/${MATCH:+${MB::=$(( MBEGIN ))}${ME::=$(( MEND ))}${Idx::=$(( (MB << ShiftWidth) | DG ))}${Starts[$Idx]::=${MB}}${Ends[$Idx]::=${ME}}${DelimGrps[$Idx]::=${DG}}${Lens[$Idx]::=$(( ME - MB ))}${Content[$Idx]::="${MATCH}"}${__Idxs::=${__Idxs:+${__Idxs}:}${Idx}}}}}}"
-			(( ${#Starts} ))
-		} {
-			FirstIdx=${Starts[(i)?*]}
-			(( MB = Starts[FirstIdx], ME = Ends[FirstIdx], DG = DelimGrps[FirstIdx] ))
-			(( ME >= MB )) || { break }
-			(( ME < ${#BuffStr} || ${#BuffStr} >= MBS )) || { break }
-			print -n ${(z)=PrintOpts} -- "${BuffStr[1,MB-1]}${OutDelims[$DG]//\{\{*\}\}/${Content[$FirstIdx]}}"
-			BuffStr="${BuffStr[ME+1,-1]}"
+		local -a Starts=() Ends=() DelimGrps=() Lens=() Content=()
+		__Idxs=""
+		: "${(@)StarDelims[(K)${BuffStr}]//(#m)*/${DG::=${MATCH}}${ID::=${InDelims[$DG]}}${ID:+${BuffStr//(#m)${~ID}/${MATCH:+${MB::=$(( MBEGIN ))}${ME::=$(( MEND ))}${Idx::=$(( (MB << ShiftWidth) | DG ))}${Starts[$Idx]::=${MB}}${Ends[$Idx]::=${ME}}${DelimGrps[$Idx]::=${DG}}${Lens[$Idx]::=$(( ME - MB ))}${Content[$Idx]::="${MATCH}"}${__Idxs::=${__Idxs:+${__Idxs}:}${Idx}}}}}}"
+
+		local Out=""
+		local -i Pos=1
+		: "${(@n)Idxs//(#m)*/${MATCH:+${${${:-$(( Starts[MATCH] >= Pos && (Ends[MATCH] < ${#BuffStr} || ${#BuffStr} >= MBS) ))}:#0}:+${Out::=${Out}${BuffStr[Pos,Starts[MATCH]-1]}${OutDelims[$(( DelimGrps[MATCH] ))]//\{\{*\}\}/${Content[$MATCH]}}}${Pos::=$(( Ends[MATCH] + 1 ))}}}}"
+		(( ${#Out} )) && {
+			print -n ${(z)=PrintOpts} -- "${Out}"
+			BuffStr="${BuffStr[Pos,-1]}"
 		}
 	}
 
