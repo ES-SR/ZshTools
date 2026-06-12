@@ -2,7 +2,13 @@
 function @delimiter:generate {
 	emulate -L zsh; setopt extendedglob typesetsilent
 
-	@args:parse Length:1 SafeMode:+ '(#s)+(#e)':AddDelimChars:+ '(#s)-(#e)':RmDelimChars:+ Delimiter:1 Visible
+
+	local SMPat="$(@args:parse:generatePattern SafeMode)"
+	local SMIdx=${argv[(I)${~SMPat}]}
+	SafeMode="${argv[$(( SMIdx + 1 ))]}"
+	argv[$SMIdx,$((SMIdx+1))]=()
+
+	@args:parse Length:1 AddDelimChars:+ RmDelimChars:+ Delimiter:1 Visible
 	set -- "${(@)ParsedArgv}"
 
 	local -aU DelimChars=(
@@ -49,7 +55,7 @@ function @delimiter:generate {
 		EchoOpt="-E"
 	}
 
-	echo ${(e)EchoOpt} "${Delim}"
+	echo ${(e)EchoOpt} "${(V)Delim}"
 }
 
 :<<-"Examples.@delimiter:generate"
