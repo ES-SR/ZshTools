@@ -11,8 +11,7 @@ function @read {
 
 	local -a PrintOpts=("${(@)PrintOptsIdxs//(#m)*/${(P)MATCH}}")
 
-	local -F BaseTimeout=${TO}
-	local -F Timeout=${BaseTimeout}
+	local -F Timeout=${TO}
 
 	local Delim1="" Delim2=""
 	local -a DefaultGroup=("${(@s..)IFS}" "{}")
@@ -20,7 +19,7 @@ function @read {
 	local __DefaultGroup="${(pj.$Delim1.)DefaultGroup}"
 
 	declare -T __Groups="${__DefaultGroup}" Groups ,
-	set +A Groups ${(@)${(s.,.)${Argv// , /,}//${(q+)MATCH}/}//(#m)*/${(pj.$Delim1.)${(A)=MATCH}}}
+	set +A Groups ${(@)${(s.,.)Argv}//(#m)*/${(pj.$Delim1.)${(A)=MATCH}}}
 
 	local -a InDelims=() OutDelims=()
 	local -A StarDelims=()
@@ -43,6 +42,7 @@ function @read {
 	(( MarkerMask = RegionComb << (RegionCount + RegionSize - 1) ))
 
 	local -a LevelKeys=( $(( [#2] 0 )) ${${(e):-{1..$RegionCount}}//(#m)*/$(( [#2] 2**MATCH - 1 ))} )
+	local -a HistKeys=( $(( [#2] 0 )) ${${(e):-{1..$RegionSize}}//(#m)*/$(( [#2] 2**MATCH - 1 ))} )
 	local -a RegionOffsets=( {$RegionCount..$(( RegionSize*RegionCount - 1 ))..$RegionSize} )
 
 	local -a TimeoutArr=()
@@ -51,14 +51,14 @@ function @read {
 	local -i TL TS
 	for TL ( {1..$RegionCount} ) {
 		for TS ( {1..$RegionSize} ) {
-			TimeoutArr[$(( 2*TS + TL ))]=$(( (1. * BaseTimeout * (RegionCount - TL + 1) / RegionCount) ** (1 - Exponents[TS + 1]) ))
+			TimeoutArr[$(( 2*TS + TL ))]=$(( (1. * TO * (RegionCount - TL + 1) / RegionCount) ** (1 - Exponents[TS + 1]) ))
 		}
 	}
 
 	local BuffStr="" ID="" MB="" ME=""
 	local -T __Idxs="" Idxs
-	local -i2 ReadState=0 LevelBits NewLevelBits Marker Hist ProtectMask DG
-	local -i RegionIdx RegionOffset HistCount Idx FirstIdx
+	local -i2 ReadState=0 LevelBits NewLevelBits Marker Hist ProtectMask DG HistCount
+	local -i RegionIdx RegionOffset Idx FirstIdx
 
 	while (( ReadState >= 0 )) {
 		(( LevelBits = ReadState & LevelMask ))
@@ -67,7 +67,7 @@ function @read {
 			RegionOffset = RegionOffsets[RegionIdx] ,
 			HistCount = (ReadState >> RegionOffset) & CounterUnit
 		))
-		Timeout=${TimeoutArr[$(( HistCount + RegionIdx ))]:-${BaseTimeout}}
+		Timeout=${TimeoutArr[$(( 2 * (${HistKeys[(Ie)${HistCount}]} - 1) + RegionIdx ))]:-${TO}}
 
 		local Char=""; local -i ReadRes=1
 		IFS= read -u 0 -t ${Timeout} -k 1 -rs Char
