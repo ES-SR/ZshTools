@@ -5,11 +5,13 @@ function @delimiter:generate {
 
 	local SMPat="$(@args:parse:generatePattern SafeMode)"
 	local SMIdx=${argv[(I)${~SMPat}]}
-	SafeMode="${argv[$(( SMIdx + 1 ))]}"
-	argv[$SMIdx,$((SMIdx+1))]=()
+	(( SMIdx )) && {
+		SafeMode="${argv[$(( SMIdx + 1 ))]}"
+		argv[$SMIdx,$((SMIdx+1))]=()
+	}
 
-	@args:parse Length:1 AddDelimChars:+ RmDelimChars:+ Delimiter:1 Visible
-	set -- "${(@)ParsedArgv}"
+	@args:parse Length:1 ++:AddDelimChars:+ --:RmDelimChars:+ Delimiter:1 Visible
+	set -- "${(@)Argv}"
 
 	local -aU DelimChars=(
 		"\u0000" # NUL
@@ -26,14 +28,16 @@ function @delimiter:generate {
 		"\u2011" # non-breaking hyphen
 	)
 
+	(( ${#Argv} )) && {
+		DelimChars=("${(@s..)Argv}")
+	}
 	(( ${#AddDelimChars} )) && {
-		DelimChars+=("${(@)AddDelimChars[2,-1]}")
+		AddDelimChars=(${(s..)AddDelimChars})
+		DelimChars+=("${(@)AddDelimChars}")
 	}
 	(( ${#RmDelimChars} )) && {
+		RmDelimChars=(${(s..)RmDelimChars})
 		DelimChars=("${(@)DelimChars:|RmDelimChars}")
-	}
-	(( ${#Argv} )) && {
-		DelimChars=("${(@)Argv}")
 	}
 
 	local Delim=${Delimiter:-""}
