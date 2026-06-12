@@ -14,14 +14,14 @@ function @read {
 	local -F BaseTimeout=${TO}
 	local -F Timeout=${BaseTimeout}
 
-	declare -T __Groups Groups=() ,
-	print -v __Groups -- ${${(j.,.)${(s. , .)Argv//${(q+)MATCH}/}}:-"[[:IFS:]] {}"}
+	declare -T __Groups="[[:IFS:]] {}" Groups ,
+	set +A Groups ${(s.,.)${Argv// , /,}//${(q+)MATCH}/}
 
 	local -a InDelims=() OutDelims=()
 	local -A StarDelims=()
-	local Grp I
+	local Grp I=0
 	for Grp ( ${Groups} ) {
-		(( I++ ))
+		(( ++I ))
 		InDelims[$I]="(${(j.|.)${(A)=Grp}[1,-2]})"
 		OutDelims[$I]="${${(A)=Grp}[-1]}"
 		StarDelims+=( "*(${(j.|.)${(A)=Grp}[1,-2]})*" "$I" )
