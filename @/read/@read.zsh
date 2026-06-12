@@ -11,24 +11,20 @@ function @read {
 
 	local -a PrintOpts=("${(@)PrintOptsIdxs//(#m)*/${(P)MATCH}}")
 
-	set -- "${(@)Argv}"
-
 	local -F BaseTimeout=${TO}
 	local -F Timeout=${BaseTimeout}
 
-	local -a DelimGroups=( ${(s. , .)${${${(@)argv:#}:+${(j. .)${(@)argv//(#m)*/${(q+)MATCH}}}}:-${(q+s..)IFS} "{}"}} )
+	declare -T __Groups Groups=() ,
+	print -v __Groups -- ${${(j.,.)${(s. , .)Argv//${(q+)MATCH}/}}:-"[[:IFS:]] {}"}
 
 	local -a InDelims=() OutDelims=()
 	local -A StarDelims=()
-	local Grp=""
-	local -i2 I=0
-	for Grp ( ${(@)DelimGroups} ) {
+	local Grp I
+	for Grp ( ${Groups} ) {
 		(( I++ ))
-		local -a GrpWords=( "${(@Q)${(z)Grp}}" )
-		(( ${#GrpWords} > 1 )) || GrpWords+=( "{}" )
-		InDelims[$I]="(${(j.|.)GrpWords[1,-2]})"
-		OutDelims[$I]="${GrpWords[-1]}"
-		StarDelims+=( "*(${(j.|.)GrpWords[1,-2]})*" "$I" )
+		InDelims[$I]="(${(j.|.)${(A)=Grp}[1,-2]})"
+		OutDelims[$I]="${${(A)=Grp}[-1]}"
+		StarDelims+=( "*(${(j.|.)${(A)=Grp}[1,-2]})*" "$I" )
 	}
 	local -i ShiftWidth=${(c)#$(( [##2] I ))}
 
