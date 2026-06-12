@@ -3,18 +3,20 @@ function @read {
 	emulate -L zsh; setopt extendedglob typesetsilent
 	if ! [[ -p /dev/stdin ]] { return 1 }
 
+	local MER MBS TO
 	@args:parse MaxEmptyReads:1 MaxBufferSize:1 Timeout:1 '-[abcCDfilmnNoOPRrsSuXxz](*|)':PrintOptsIdxs
+	MER=${MaxEmptyReads:-5}
+	MBS=${MaxBufferSize:-255}
+	TO=${Timeout:-.9}
 
 	local -a PrintOpts=("${(@)PrintOptsIdxs//(#m)*/${(P)MATCH}}")
 
-	local -i MaxBufferSize=${${MaxBufferSize[1]}:-4096}
-	local -F BaseTimeout=${${Timeout[1]}:-0.2}
+	set -- "${(@)Argv}"
+
+	local -F BaseTimeout=${TO}
 	local -F Timeout=${BaseTimeout}
 
-	local -a DelimGroups=( ${(s. , .)${Argv:+${(q+)=Argv}}} )
-	(( ${#DelimGroups} )) || {
-		DelimGroups=( "${(q+s..)IFS} {}" )
-	}
+	local -a DelimGroups=( ${(s. , .)${${${(@)argv:#}:+${(j. .)${(@)argv//(#m)*/${(q+)MATCH}}}}:-${(q+s..)IFS} "{}"}} )
 
 	local -a InDelims=() OutDelims=()
 	local -A StarDelims=()
@@ -30,7 +32,7 @@ function @read {
 	}
 	local -i ShiftWidth=${(c)#$(( [##2] I ))}
 
-	local -i RegionCount=${${MaxEmptyReads[1]}:-4}
+	local -i RegionCount=${MER}
 	local -i RegionSize=$(( (63 - RegionCount) / RegionCount > 1 ? (63 - RegionCount) / RegionCount : 1 ))
 
 	local -i2 LevelMask RegionMask RegionComb CounterUnit CounterMasks MarkerMask
@@ -97,7 +99,7 @@ function @read {
 			FirstIdx=${Starts[(i)?*]}
 			(( MB = Starts[FirstIdx], ME = Ends[FirstIdx], DG = DelimGrps[FirstIdx] ))
 			(( ME >= MB )) || { break }
-			(( ME < ${#BuffStr} || ${#BuffStr} >= MaxBufferSize )) || { break }
+			(( ME < ${#BuffStr} || ${#BuffStr} >= MBS )) || { break }
 			print -n ${(z)=PrintOpts} -- "${BuffStr[1,MB-1]}${OutDelims[$DG]//\{\{*\}\}/${Content[$FirstIdx]}}"
 			BuffStr="${BuffStr[ME+1,-1]}"
 		}
