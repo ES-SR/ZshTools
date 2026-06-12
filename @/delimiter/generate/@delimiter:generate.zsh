@@ -50,12 +50,12 @@ function @delimiter:generate {
 		}
 	}
 
-	local EchoOpt=""
+	local EchoOpt="-e"
 	(( Visible )) && {
 		EchoOpt="-E"
 	}
 
-	echo ${(e)EchoOpt} "${(V)Delim}"
+	echo ${(z)EchoOpt} ${Delim}
 }
 
 :<<-"Examples.@delimiter:generate"
