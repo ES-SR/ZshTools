@@ -92,20 +92,18 @@ function @read {
 		))
 
 		Buffer+=("${Char}")
-		local Out="${(j..)Buffer[1,MaxPos]}"
-		Buffer[1,MaxPos]=()
 		BuffStr="${(j..)Buffer}"
+		local Out="${BuffStr[1,MaxPos]}"
+		local -i Pos=$(( ${#Out} + 1 ))
 
 		local -a Starts=() Ends=() DelimGrps=() Lens=() Content=()
 		__Idxs=""
 		: "${(@)StarDelims[(K)${BuffStr}]//(#m)*/${DG::=${MATCH}}${ID::=${InDelims[$DG]}}${ID:+${BuffStr//(#m)${~ID}/${MATCH:+${MB::=$(( MBEGIN ))}${ME::=$(( MEND ))}${Idx::=$(( (MB << ShiftWidth) | DG ))}${Starts[$Idx]::=${MB}}${Ends[$Idx]::=${ME}}${DelimGrps[$Idx]::=${DG}}${Lens[$Idx]::=$(( ME - MB ))}${Content[$Idx]::="${MATCH}"}${__Idxs::=${__Idxs:+${__Idxs}:}${Idx}}}}}}"
 
-		local -i Pos=1
-		: "${(@n)Idxs//(#m)*/${MATCH:+${${${:-$(( Ends[MATCH] < ${#BuffStr} || ${#BuffStr} >= MBS ))}:#0}:+${Out::=${Out}${BuffStr[Pos,Starts[MATCH]-1]}${OutDelims[$(( DelimGrps[MATCH] ))]//\{\{*\}\}/${Content[$MATCH]}}}${Pos::=$(( Ends[MATCH] + 1 ))}}}}"
+		: "${(@n)Idxs//(#m)*/${MATCH:+${${${:-$(( Starts[MATCH] >= Pos && (Ends[MATCH] < ${#BuffStr} || ${#BuffStr} >= MBS) ))}:#0}:+${Out::=${Out}${BuffStr[Pos,Starts[MATCH]-1]}${OutDelims[$(( DelimGrps[MATCH] ))]//\{\{*\}\}/${Content[$MATCH]}}}${Pos::=$(( Ends[MATCH] + 1 ))}}}}"
 		(( ${#Out} )) && {
 			print -n ${(z)=PrintOpts} -- "${Out}"
-			BuffStr="${BuffStr[Pos,-1]}"
-			Buffer=(${(s..)BuffStr})
+			Buffer[1,Pos-1]=()
 		}
 	}
 
