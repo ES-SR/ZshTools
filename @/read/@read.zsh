@@ -3,11 +3,12 @@ function @read {
 	emulate -L zsh; setopt extendedglob typesetsilent
 	if ! [[ -p /dev/stdin ]] { return 1 }
 
-	local MER MBS TO
-	@args:parse MaxEmptyReads:1 MaxBufferSize:1 Timeout:1 '-[abcCDfilmnNoOPRrsSuXxz](*|)':PrintOptsIdxs
+	local MER MBS TO CS
+	@args:parse MaxEmptyReads:1 MaxBufferSize:1 ChunkSize:1 Timeout:1 '-[abcCDfilmnNoOPRrsSuXxz](*|)':PrintOptsIdxs
 	MER=${MaxEmptyReads:-5}
 	MBS=${MaxBufferSize:-255}
 	TO=${Timeout:-.9}
+	CS=${ChunkSize:-1}
 	local -i MaxPos=$(( -MBS - 1 ))
 
 	local -a PrintOpts=("${(@)PrintOptsIdxs//(#m)*/${(P)MATCH}}")
@@ -92,6 +93,11 @@ function @read {
 		))
 
 		Buffer+=("${Char}")
+		local -i Chunk=1
+		while (( Chunk++ < CS )) {
+			IFS= read -u 0 -t 0 -k 1 -rs Char || break
+			Buffer+=("${Char}")
+		}
 		BuffStr="${(j..)Buffer}"
 		local Out="${BuffStr[1,MaxPos]}"
 		local -i Pos=$(( ${#Out} + 1 ))
@@ -100,7 +106,7 @@ function @read {
 		__Idxs=""
 		: "${(@)StarDelims[(K)${BuffStr}]//(#m)*/${DG::=${MATCH}}${ID::=${InDelims[$DG]}}${ID:+${BuffStr//(#m)${~ID}/${MATCH:+${MB::=$(( MBEGIN ))}${ME::=$(( MEND ))}${Idx::=$(( (MB << ShiftWidth) | DG ))}${Starts[$Idx]::=${MB}}${Ends[$Idx]::=${ME}}${DelimGrps[$Idx]::=${DG}}${Lens[$Idx]::=$(( ME - MB ))}${Content[$Idx]::="${MATCH}"}${__Idxs::=${__Idxs:+${__Idxs}:}${Idx}}}}}}"
 
-		: "${(@n)Idxs//(#m)*/${MATCH:+${${${:-$(( Starts[MATCH] >= Pos && (Ends[MATCH] < ${#BuffStr} || ${#BuffStr} >= MBS) ))}:#0}:+${Out::=${Out}${BuffStr[Pos,Starts[MATCH]-1]}${OutDelims[$(( DelimGrps[MATCH] ))]//\{\{*\}\}/${Content[$MATCH]}}}${Pos::=$(( Ends[MATCH] + 1 ))}}}}"
+		: "${(@)${(@n)Idxs}//(#m)*/${MATCH:+${${${:-$(( Starts[MATCH] >= Pos && (Ends[MATCH] < ${#BuffStr} || ${#BuffStr} >= MBS) ))}:#0}:+${Out::=${Out}${BuffStr[Pos,Starts[MATCH]-1]}${OutDelims[$(( DelimGrps[MATCH] ))]//\{\{*\}\}/${Content[$MATCH]}}}${Pos::=$(( Ends[MATCH] + 1 ))}}}}"
 		(( ${#Out} )) && {
 			print -n ${(z)=PrintOpts} -- "${Out}"
 			Buffer[1,Pos-1]=()
