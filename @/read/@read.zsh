@@ -103,7 +103,7 @@ function @read {
 		: "${(@n)Idxs//(#m)*/${MATCH:+${${${:-$(( Starts[MATCH] >= Pos && (Ends[MATCH] < ${#BuffStr} || ${#BuffStr} >= MBS) ))}:#0}:+${Out::=${Out}${BuffStr[Pos,Starts[MATCH]-1]}${OutDelims[$(( DelimGrps[MATCH] ))]//\{\{*\}\}/${Content[$MATCH]}}}${Pos::=$(( Ends[MATCH] + 1 ))}}}}"
 		(( ${#Out} )) && {
 			print -n ${(z)=PrintOpts} -- "${Out}"
-			Buffer[1,Pos-1]=()
+			Buffer=( ${(s..)BuffStr[Pos,-1]} )
 		}
 	}
 
