@@ -8,6 +8,7 @@ function @read {
 	MER=${MaxEmptyReads:-5}
 	MBS=${MaxBufferSize:-255}
 	TO=${Timeout:-.9}
+	local -i MaxPos=$(( -MBS - 1 ))
 
 	local -a PrintOpts=("${(@)PrintOptsIdxs//(#m)*/${(P)MATCH}}")
 
@@ -91,9 +92,9 @@ function @read {
 		))
 
 		Buffer+=("${Char}")
+		local Out="${(j..)Buffer[1,MaxPos]}"
+		Buffer[1,MaxPos]=()
 		BuffStr="${(j..)Buffer}"
-		local Out="${BuffStr[1,-MBS-1]}"
-		BuffStr="${BuffStr[-MBS,-1]}"
 
 		local -a Starts=() Ends=() DelimGrps=() Lens=() Content=()
 		__Idxs=""
