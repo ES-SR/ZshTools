@@ -55,7 +55,8 @@ function @read {
 		}
 	}
 
-	local Buffer="" ID="" MB="" ME=""
+	local -a Buffer=()
+	local BuffStr="" ID="" MB="" ME=""
 	local -T __Idxs="" Idxs
 	local -i2 ReadState=0 LevelBits NewLevelBits Marker Hist ProtectMask DG HistCount
 	local -i RegionIdx RegionOffset Idx
@@ -89,23 +90,25 @@ function @read {
 					: Marker)
 		))
 
-		Buffer+="${Char}"
+		Buffer+=("${Char}")
+		BuffStr="${(j..)Buffer}"
 
 		local -a Starts=() Ends=() DelimGrps=() Lens=() Content=()
 		__Idxs=""
-		: "${(@)StarDelims[(K)${Buffer}]//(#m)*/${DG::=${MATCH}}${ID::=${InDelims[$DG]}}${ID:+${Buffer//(#m)${~ID}/${MATCH:+${MB::=$(( MBEGIN ))}${ME::=$(( MEND ))}${Idx::=$(( (MB << ShiftWidth) | DG ))}${Starts[$Idx]::=${MB}}${Ends[$Idx]::=${ME}}${DelimGrps[$Idx]::=${DG}}${Lens[$Idx]::=$(( ME - MB ))}${Content[$Idx]::="${MATCH}"}${__Idxs::=${__Idxs:+${__Idxs}:}${Idx}}}}}}"
+		: "${(@)StarDelims[(K)${BuffStr}]//(#m)*/${DG::=${MATCH}}${ID::=${InDelims[$DG]}}${ID:+${BuffStr//(#m)${~ID}/${MATCH:+${MB::=$(( MBEGIN ))}${ME::=$(( MEND ))}${Idx::=$(( (MB << ShiftWidth) | DG ))}${Starts[$Idx]::=${MB}}${Ends[$Idx]::=${ME}}${DelimGrps[$Idx]::=${DG}}${Lens[$Idx]::=$(( ME - MB ))}${Content[$Idx]::="${MATCH}"}${__Idxs::=${__Idxs:+${__Idxs}:}${Idx}}}}}}"
 
-		local Out="${Buffer[1,-MBS-1]}"
+		local Out="${BuffStr[1,-MBS-1]}"
 		local -i Pos=$(( ${#Out} + 1 ))
-		: "${(@n)Idxs//(#m)*/${MATCH:+${${${:-$(( Starts[MATCH] >= Pos && (Ends[MATCH] < ${#Buffer} || ${#Buffer} >= MBS) ))}:#0}:+${Out::=${Out}${Buffer[Pos,Starts[MATCH]-1]}${OutDelims[$(( DelimGrps[MATCH] ))]//\{\{*\}\}/${Content[$MATCH]}}}${Pos::=$(( Ends[MATCH] + 1 ))}}}}"
+		: "${(@n)Idxs//(#m)*/${MATCH:+${${${:-$(( Starts[MATCH] >= Pos && (Ends[MATCH] < ${#BuffStr} || ${#BuffStr} >= MBS) ))}:#0}:+${Out::=${Out}${BuffStr[Pos,Starts[MATCH]-1]}${OutDelims[$(( DelimGrps[MATCH] ))]//\{\{*\}\}/${Content[$MATCH]}}}${Pos::=$(( Ends[MATCH] + 1 ))}}}}"
 		(( ${#Out} )) && {
 			print -n ${(z)=PrintOpts} -- "${Out}"
-			Buffer="${Buffer[Pos,-1]}"
+			BuffStr="${BuffStr[Pos,-1]}"
+			Buffer=(${(s..)BuffStr})
 		}
 	}
 
 	(( ${#Buffer} )) && {
-		print ${(z)PrintOpts} -- "${Buffer}"
+		print ${(z)PrintOpts} -- "${(j..)Buffer}"
 	}
 }
 
