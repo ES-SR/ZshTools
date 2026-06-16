@@ -32,7 +32,6 @@ function @read {
 		OutDelims[$I]="${${(Aps.$Delim1.)Grp}[-1]}"
 		StarDelims+=( "*(${(j.|.)${(Aps.$Delim1.)Grp}[1,-2]})*" "$I" )
 	}
-	local -i ShiftWidth=${(c)#$(( [##2] I ))}
 
 	local -i RegionCount=${MER}
 	local -i RegionSize=$(( (63 - RegionCount) / RegionCount > 1 ? (63 - RegionCount) / RegionCount : 1 ))
@@ -58,10 +57,9 @@ function @read {
 	}
 
 	local -a Buffer=()
-	local BuffStr="" ID="" MB="" ME=""
-	local -T __Idxs="" Idxs
+	local BuffStr="" ID=""
 	local -i2 ReadState=0 LevelBits NewLevelBits Marker Hist ProtectMask DG HistCount
-	local -i RegionIdx RegionOffset Idx
+	local -i RegionIdx RegionOffset
 
 	while (( ReadState >= 0 )) {
 		(( LevelBits = ReadState & LevelMask ))
@@ -101,11 +99,12 @@ function @read {
 		local Out="${BuffStr[1,MaxPos]}"
 		local -i Pos=$(( ${#Out} + 1 ))
 
-		local -a Starts=() Ends=() DelimGrps=() Lens=() Content=()
-		__Idxs=""
-		: "${(@)StarDelims[(K)${BuffStr}]//(#m)*/${DG::=${MATCH}}${ID::=${InDelims[$DG]}}${ID:+${BuffStr//(#m)${~ID}/${MATCH:+${MB::=$(( MBEGIN ))}${ME::=$(( MEND ))}${Idx::=$(( (MB << ShiftWidth) | DG ))}${Starts[$Idx]::=${MB}}${Ends[$Idx]::=${ME}}${DelimGrps[$Idx]::=${DG}}${Lens[$Idx]::=$(( ME - MB ))}${Content[$Idx]::="${MATCH}"}${__Idxs::=${__Idxs:+${__Idxs}:}${Idx}}}}}}"
+		local -a Starts=() Ends=() DelimGrps=() Lens=() Content=() Idxs=()
+		local -i N=0
+		: "${(@)StarDelims[(K)${BuffStr}]//(#m)*/${DG::=${MATCH}}${ID::=${InDelims[$DG]}}${ID:+${BuffStr//(#m)${~ID}/${MATCH:+${N::=$(( N + 1 ))}${Starts[$N]::=$(( MBEGIN ))}${Ends[$N]::=$(( MEND ))}${DelimGrps[$N]::=${DG}}${Lens[$N]::=$(( MEND - MBEGIN ))}${Content[$N]::="${MATCH}"}${Idxs[$N]::=$N}}}}}"
 
-		: "${(@)${(@n)Idxs}//(#m)*/${MATCH:+${${${:-$(( Starts[MATCH] >= Pos && (Ends[MATCH] < ${#BuffStr} || ${#BuffStr} >= MBS) ))}:#0}:+${Out::=${Out}${BuffStr[Pos,Starts[MATCH]-1]}${OutDelims[$(( DelimGrps[MATCH] ))]//\{\{*\}\}/${Content[$MATCH]}}}${Pos::=$(( Ends[MATCH] + 1 ))}}}}"
+		local -a ByPos=( ${(@)${(@n)${(@)Idxs//(#m)*/${Starts[MATCH]}:${MATCH}}}//*:/} )
+		: "${(@)ByPos//(#m)*/${${${:-$(( Starts[MATCH] >= Pos && (Ends[MATCH] < ${#BuffStr} || ${#BuffStr} >= MBS) ))}:#0}:+${Out::=${Out}${BuffStr[Pos,Starts[MATCH]-1]}${OutDelims[$(( DelimGrps[MATCH] ))]//\{\{*\}\}/${Content[$MATCH]}}}${Pos::=$(( Ends[MATCH] + 1 ))}}}"
 		(( ${#Out} )) && {
 			print -n ${(z)=PrintOpts} -- "${Out}"
 			Buffer[1,Pos-1]=()
