@@ -93,10 +93,9 @@ function @read {
 		))
 
 		Buffer+=("${Char}")
-		local -i Chunk=1
-		while (( Chunk++ < CS )) {
-			IFS= read -u 0 -t 0 -k 1 -rs Char || break
-			Buffer+=("${Char}")
+		(( CS > 1 )) && {
+			IFS= read -u 0 -t ${Timeout} -k $(( CS - 1 )) -rs Char
+			Buffer+=( ${(s..)Char} )
 		}
 		BuffStr="${(j..)Buffer}"
 		local Out="${BuffStr[1,MaxPos]}"
