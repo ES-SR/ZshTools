@@ -284,22 +284,26 @@ local -a NewBuffState=( "${(@s..)BuffStr#$Output}" )
 
 ## 8. Chunked reads
 
-`-k N` reads N chars but `-t` only applies to the first; the timeout drives the
-history logic, so the first char of each chunk carries the adaptive timeout and
-the rest are read without it. Phased over `CS=(1 chunksize-1)`:
+A single read does it: `-t` applies to the first character of a `-k N` read and
+the remaining N-1 block until they arrive or EOF. So the first-char timeout is
+the read decision that drives the history logic, and the chunk fills (blocking)
+once that char is in hand. One call — no split:
 
 ```zsh
-local -a CS=( 1 $(( ${ChunkSize:-1} - 1 )) )
-local -a Timeout=( $TO " " )
-...
-for (( I=0 ; ${CS[$((++I))]:-0} ; )) {        # :-0 — empty for-condition loops forever
-	IFS= read -u 0 ${(ze)I:s/0//:s/1/-t "${TO}"/} -k ${CS[$I]} -rs Char
-	(( ReadRes = $? && I == 1 )) && {
-		# empty first read → level up → continue 2
-	}
-	Buffer+=( ${(s..)Char} )
+IFS= read -u 0 -t ${TO} -k ${ChunkSize} -rs Char
+(( ReadRes = $? )) && {
+	# empty first read (timeout, no char) → level up
 }
+Buffer+=( ${(s..)Char} )
 ```
+
+A two-read split (`-t $TO -k 1` then a drain read) is pointless: it applies the
+timeout twice, still blocks for any chunk size > 2, and only adds a second
+meaningless first-char timeout on the drain that the `I == 1` guard discards.
+Note: `-t 0` vs no `-t` only differ on the first char when nothing is available
+(no `-t` waits indefinitely, `-t 0` polls); past the first char both block for the
+count. A truly non-blocking "grab what's buffered" drain is only possible with a
+`-t 0 -k 1` loop, one char per read.
 
 ---
 
