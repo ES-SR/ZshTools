@@ -3,20 +3,20 @@ function @read {
 	emulate -L zsh; setopt extendedglob typesetsilent
 	if ! [[ -p /dev/stdin ]] { return 1 }
 
-	local MER MBS TO CS
+	unset MaxEmptyReads MaxBufferSize ChunkSize Timeout PrintOptsIdxs
 	@args:parse MaxEmptyReads:1 MaxBufferSize:1 ChunkSize:1 Timeout:1 '-[abcCDfilmnNoOPRrsSuXxz](*|)':PrintOptsIdxs
-	MER=${MaxEmptyReads:-5}
-	MBS=${MaxBufferSize:-255}
-	TO=${Timeout:-.9}
-	CS=${ChunkSize:-1}
+	local -i MER=${MaxEmptyReads:-5}
+	local -i MBS=${MaxBufferSize:-255}
+	local -F TO=${Timeout:-.9}
+	local -a CS=( 1 $(( ${ChunkSize:-1} - 1 )) )
 	local -i MaxPos=$(( -MBS - 1 ))
 
 	local -a PrintOpts=("${(@)PrintOptsIdxs//(#m)*/${(P)MATCH}}")
 
-	local -F Timeout=${TO}
+	local -a Timeout=( ${TO} 0 )
 
 	local Delim1="" Delim2=""
-	local -a DefaultGroup=("${(@s..)IFS}" "{}")
+	local -a DefaultGroup=("${(@s..)IFS}" $'\n')
 	@delimiter:generate -sm "${(q+)DefaultGroup}" | read -t1 -r Delim1
 	local __DefaultGroup="${(pj.$Delim1.)DefaultGroup}"
 
@@ -68,15 +68,16 @@ function @read {
 			RegionOffset = RegionOffsets[RegionIdx] ,
 			HistCount = (ReadState >> RegionOffset) & CounterUnit
 		))
-		Timeout=${TimeoutArr[$(( 2 * (${HistKeys[(Ie)${HistCount}]} - 1) + RegionIdx ))]:-${TO}}
+		Timeout[1]=${TimeoutArr[$(( 2 * (${HistKeys[(Ie)${HistCount}]} - 1) + RegionIdx ))]:-${TO}}
 
 		local Char=""; local -i ReadRes=1
-		IFS= read -u 0 -t ${Timeout} -k 1 -rs Char
-		(( ReadRes = $? ))
-
-		(( ReadRes )) && {
-			(( ReadState = (NewLevelBits = LevelBits << 1 | 1) > LevelMask ? ~ ReadState : ReadState & ~ LevelMask | NewLevelBits ))
-			continue
+		for (( I=0 ; ${CS[$((++I))]:-0} ; )) {
+			IFS= read -u 0 -t ${Timeout[$I]} -k ${CS[$I]} -rs Char
+			(( ReadRes = $? && I == 1 )) && {
+				(( ReadState = (NewLevelBits = LevelBits << 1 | 1) > LevelMask ? ~ ReadState : ReadState & ~ LevelMask | NewLevelBits ))
+				continue 2
+			}
+			Buffer+=( ${(s..)Char} )
 		}
 
 		((
@@ -90,11 +91,6 @@ function @read {
 					: Marker)
 		))
 
-		Buffer+=("${Char}")
-		(( CS > 1 )) && {
-			IFS= read -u 0 -t ${Timeout} -k $(( CS - 1 )) -rs Char
-			Buffer+=( ${(s..)Char} )
-		}
 		BuffStr="${(j..)Buffer}"
 		local Out="${BuffStr[1,MaxPos]}"
 		local -i Pos=$(( ${#Out} + 1 ))
