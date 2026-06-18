@@ -2,8 +2,8 @@
 function @delimiter:generate {
 	emulate -L zsh; setopt extendedglob typesetsilent
 
-	@args:parse Length:1 SafeMode:+ '(#s)+(#e)':AddDelimChars:+ '(#s)-(#e)':RmDelimChars:+ Delimiter:1 Visible
-	set -- "${(@)ParsedArgv}"
+	@args:parse Length:1 SafeMode:+ '++':AddDelimChars:+ '--':RmDelimChars:+ Delimiter:1 Visible
+	set -- "${(@)Argv}"
 
 	local -aU DelimChars=(
 		"\u0000" # NUL
@@ -17,17 +17,17 @@ function @delimiter:generate {
 		"\u2008" # punctuation space
 		"\u2009" # thin space
 		"\u200A" # hair space
-		"\u2011" # non-breaking hyphen
 	)
 
+	(( ${#Argv} )) && {
+		DelimChars=("${(@s..)Argv}")
+	}
 	(( ${#AddDelimChars} )) && {
-		DelimChars+=("${(@)AddDelimChars[2,-1]}")
+		DelimChars+=("${(@s..)AddDelimChars}")
 	}
 	(( ${#RmDelimChars} )) && {
-		DelimChars=("${(@)DelimChars:|RmDelimChars}")
-	}
-	(( ${#Argv} )) && {
-		DelimChars=("${(@)Argv}")
+		local -a RmChars=("${(@s..)RmDelimChars}")
+		DelimChars=("${(@)DelimChars:|RmChars}")
 	}
 
 	local Delim=${Delimiter:-""}
@@ -44,12 +44,11 @@ function @delimiter:generate {
 		}
 	}
 
-	local EchoOpt=""
 	(( Visible )) && {
-		EchoOpt="-E"
+		print -R "${(V)Delim}"
+	} || {
+		print -R "${Delim}"
 	}
-
-	echo ${(e)EchoOpt} "${Delim}"
 }
 
 :<<-"Examples.@delimiter:generate"
