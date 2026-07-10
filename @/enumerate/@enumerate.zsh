@@ -5,6 +5,7 @@ function @enumerate {
 	local VarName                                          
 	while [[ -n ${VarName::=${(k)parameters[(I)${1}]}} ]] {
 		local -a VarNames=(${(z)VarName})
+
 		for VarName ( $VarNames ) {                  
 			[[ ${(Pt)VarName} = *"assoc"* ]] && {   
 				Elements+=(${(z)${(ok)${(P)VarName}}//(#m)*/${(q+)MATCH} ${(q+)${(P)VarName}[$MATCH]} })                                                     
@@ -12,6 +13,7 @@ function @enumerate {
 				Elements+=(${${(P)VarName}//(#m)*/${(q+)MATCH}})
 			} 
 		}
+
 		argv[1]=()                  
 	}                                         
 
@@ -21,21 +23,21 @@ function @enumerate {
 	print -- "${(@)Arr}"
 }                        
 
+
 : <<"Examples.@enumerate"
-	() {                                             
-		local Arg                        
-		for Arg {
-			local -a Res=($(@enumerate $Arg))
-			print -aC2 -- ${Res[1,8]}        
-		}                         
-		local -a Res=($(@enumerate "${(@)argv}"))
-		print -aC2 -- ${Res[1,18]}
-	} path options               
 	@enumerate {a..h}
 	@enumerate "(#i)path"
-	() {                             
+	() {
+		local Arg
+		for Arg {
+			local -a Res=($(@enumerate $Arg))
+			print -aC2 -- ${Res[1,8]}
+		}
+		local -a Res=($(@enumerate "${(@)argv}"))
+		print -aC2 -- ${Res[1,18]}
+
 		local -a Array=( one two options four )
 		@enumerate $Array
 		@enumerate Array five six
-	}
+	} path options
 Examples.@enumerate
