@@ -8,7 +8,7 @@ function @enumerate {
 
 		for VarName ( $VarNames ) {                  
 			[[ ${(Pt)VarName} = *"assoc"* ]] && {   
-				Elements+=(${(z)${(ok)${(P)VarName}}//(#m)*/${(q+)MATCH} ${(q+)${(P)VarName}[$MATCH]} })                                                     
+				Elements+=(${(z)${(ok)${(P)VarName}}//(#m)*/${(q+)MATCH}${(q+)${(P)VarName}[$MATCH]}})                                                     
 			} || {
 				Elements+=(${${(P)VarName}//(#m)*/${(q+)MATCH}})
 			} 
