@@ -5,16 +5,19 @@
 
 function @array:toAssoc @assoc:fromArray {
 	emulate -L zsh; options[extendedglob]=on
-
+        
 	local Name=${(k)parameters[(I)${1:?}]}
 	if [[ ${(tP)Name} == "assoc"* ]] {
-		shift
-	} else {
+		shift       
+	} else {                                
 		unset Name
-	}
-	local -A Assoc=(${${(e):-{1..$ARGC}}:^argv})
+	}                
+	local -A Assoc                 
+	(( ${#${(P)Name}} )) && {       
+		Assoc=(${${(e):-{1..$ARGC}}:^argv})
+	}                                               
 	local Output="$(typeset -p1 Assoc)"
-	(( ${+Name} )) && {
+	(( ${+Name} )) && {      
 		Output=${Output/Assoc/$Name}
 	}
 	print -- $Output
@@ -276,7 +279,6 @@ function __@args:parse {
 }
 function __@args:parse:bridge {
 	emulate -L zsh
-	(( ARGC )) || { return }
 
 	local PackedArgs="${(@q)argv}"
 	print -r -- "eval "$'\"\$'"(__@args:parse "$'\"'"${PackedArgs}"$'\"'" "$'\"\$'"{(@)argv}"$'\"'")"$'\"'
