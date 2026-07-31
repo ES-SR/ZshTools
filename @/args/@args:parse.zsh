@@ -4,14 +4,15 @@
 () {
 
 function @array:toAssoc @assoc:fromArray {
-	emulate -L zsh; options[extendedglob]=on
+	emulate -L zsh; setopt extendedglob
         
 	local Name=${(k)parameters[(I)${1:?}]}
 	if [[ ${(tP)Name} == "assoc"* ]] {
 		shift       
 	} else {                                
 		unset Name
-	}                
+	}
+	set -- "${(@)argv:#(#s)[[:space:]]#(#e)}"
 	local -A Assoc                 
 	(( ${#${(P)Name}} )) && {       
 		Assoc=(${${(e):-{1..$ARGC}}:^argv})
