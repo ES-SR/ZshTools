@@ -77,28 +77,34 @@ function @arrays:slice {
 
 	local ArrayName=${1:?}
 	local -a Array=("${(@P)ArrayName}")
-	shift
+	argv[1]=()
 
-	local Mode=${${argv[(R)(#s)(-|+|_)(#e)]}:-"+"}
-	argv=(${argv:#$Mode})
+	local Mode="+"
+	local ModeIdx=${argv[(I)(#s)[-+_](#e)]}
+	(( ModeIdx )) && {
+		Mode=$argv[$ModeIdx]
+		argv[$ModeIdx]=()
+	}
 
 	local -A Modes=(
 		['+']=""
-		['-']=": "$'\$'"{IdxStart::="$'\$'"(( IdxStart=IdxStart+1 ))}; : "$'\$'"{IdxEnd::="$'\$'"(( IdxEnd=IdxEnd+1 ))}"
-		['_']=": "$'\$'"{IdxStart::="$'\$'"(( IdxStart=IdxStart+1 ))}"
+		['-']=IdxStart++\ IdxEnd++
+		['_']=IdxStart++
 	)
-	local Cmds=("${Modes[$Mode]}" ": "$'\$'"{(A)Slice::="$'\$'"{Array["$'\$'"IdxStart, "$'\$'"IdxEnd]}}")
 
 	local -a argv=($(@arrays:indices:normalize $ARGC $argv))
 
-	local I=1 IdxStart=0 Idx=""
-	for Idx ( ${(-)argv} $(( ${#Array} + 1 )) ) {
+	argv+=($(( ${#Array} + 1 )))
+
+	local -i I IdxStart Idx
+	(( I=1, IdxStart=0 ))
+	for Idx ( ${(-)argv} ) {
 		local -i IdxEnd
 		(( IdxEnd = Idx - 1 ))
-		local -a Slice=()
-		${(ze)Cmds}
+		(( ${Modes[$Mode]} ))
+		local -a Slice=("${(@)Array[$IdxStart, $IdxEnd]}")
 		local Output="$(typeset -p Slice)"
-		print -- "${Output/Slice/${ArrayName}${IdxStart}}"
+		print -r -- "${Output/Slice/$ArrayName$IdxStart}"
 
 		(( I++ ))
 		(( IdxStart = Idx ))
@@ -110,7 +116,7 @@ function @arrays:removeIndices {
 
 	local ArrayName=${1:?}
 	shift
-	local -a Array=("${(@P)ArrayName}")
+	local -a Array=(${(P)ArrayName})
 
 	local -aU Indices=($(@arrays:indices:normalize $ArrayName "${(@)argv}"))
 	local Idx
@@ -203,7 +209,7 @@ function __@args:parse {
 	emulate -L zsh; setopt extendedglob
 
 	local OriginalArgs=("${(z@)1}")
-	local Args=("${(z@)${(s.=.)1}}")
+	local Args=("${(@s.=.)${(z)1}//(#m)*/${(Q)MATCH}}")
 	shift
 
 	local -A Specs
@@ -245,16 +251,17 @@ function __@args:parse {
 		for Match ( ${(s.:.)Matches[$SpecName]} ) {
 			MatchIdxs+=($Match)
 			(( MatchCount++ ))
-			local -a PossibleArgs=("${(@Pe):-$'\$'"Args$((Match+1))"}")
-			SpecArr+=( ${PossibleArgs[1,${MaxVals/+/${#PossibleArgs}}]} )
+			local ArgName="Args$((Match+1))"
+			local -a PossibleArgs=("${(@P)ArgName}")
+			SpecArr+=( "${(@)PossibleArgs[1,${MaxVals/+/${#PossibleArgs}}]}" )
 			DirtyArgs+=( {$Match..$((Match+${#SpecArr}))} )
 		}
 		if [[ $MaxVals == "Null" ]] {
-			SpecArr+=(${MatchIdxs:|DirtyMatchIdxs})
+			SpecArr+=("${(@)MatchIdxs:|DirtyMatchIdxs}")
 		}
 		DirtyMatchIdxs+=($MatchIdxs)
-		local Output="$(typeset -p SpecArr)"
-		print -- "${Output/SpecArr/${SpecName}}"
+		local Output="$(typeset -p1 SpecArr)"
+		print -r -- "${Output/SpecArr/${SpecName}}"
 	}
 	local -a CleanArgv=("${(@)Args}")
 	eval "$(@arrays:removeIndices CleanArgv "${(@)DirtyArgs}")"
