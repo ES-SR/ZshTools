@@ -201,7 +201,7 @@ function @args:parse:match {
 	local Pattern
 	for Pattern {
 		local -A Matches=("${(@kv)Assoc[(R)${~Pattern}]}")
-		print -- "${(@)${(-k)Matches//(#m)(*)/"$MATCH $Matches[$MATCH]"}}"
+		print -- ${(-k)Matches//(#m)(*)/"$MATCH $Matches[$MATCH]"}
 	}
 }
 
