@@ -245,7 +245,7 @@ function __@args:parse {
 		for Match ( ${(s.:.)Matches[$SpecName]} ) {
 			MatchIdxs+=($Match)
 			(( MatchCount++ ))
-			local -a PossibleArgs=(${(Pe):-$'\$'"Args$((Match+1))"})
+			local -a PossibleArgs=("${(@Pe):-$'\$'"Args$((Match+1))"}")
 			SpecArr+=( ${PossibleArgs[1,${MaxVals/+/${#PossibleArgs}}]} )
 			DirtyArgs+=( {$Match..$((Match+${#SpecArr}))} )
 		}
