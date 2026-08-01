@@ -226,7 +226,7 @@ function __@args:parse {
 
 		Matches+=( [${Name}]=${(j.:.)${(k)SpecMatches}} )
 		local Output="$(typeset -p SpecMatches)"
-		print -- "${Output/SpecMatches/${{Name}}"
+		print -- "${Output/SpecMatches/${Name}}"
 	}
 
 	local -aU DirtyArgs=(${(zs.:.)=Matches})
