@@ -4,7 +4,7 @@
 () {
 
 function @array:toAssoc @assoc:fromArray {
-	emulate -L zsh; options[extendedglob]=on
+	emulate -L zsh; setopt extendedglob
 
 	local Name=${(k)parameters[(I)${1:?}]}
 	if [[ ${(tP)Name} == "assoc"* ]] {
@@ -25,7 +25,7 @@ function @array:toAssoc @assoc:fromArray {
 }
 
 function @assoc:toArray @array:fromAssoc {
-	emulate -L zsh; options[extendedglob]=on
+	emulate -L zsh; setopt extendedglob
 
 	local Name=${(k)parameters[(I)${1:?}]}
 	if [[ ${(tP)Name} == "array"* ]] {
@@ -83,9 +83,9 @@ function @arrays:slice {
 	argv=(${argv:#$Mode})
 
 	local -A Modes=(
-		['+']=""                                                                                                                                                  
+		['+']=""
 		['-']=": "$'\$'"{IdxStart::="$'\$'"(( IdxStart=IdxStart+1 ))}; : "$'\$'"{IdxEnd::="$'\$'"(( IdxEnd=IdxEnd+1 ))}"
-		['_']=": "$'\$'"{IdxStart::="$'\$'"(( IdxStart=IdxStart+1 ))}"                                      
+		['_']=": "$'\$'"{IdxStart::="$'\$'"(( IdxStart=IdxStart+1 ))}"
 	)
 	local Cmds=("${Modes[$Mode]}" ": "$'\$'"{(A)Slice::="$'\$'"{Array["$'\$'"IdxStart, "$'\$'"IdxEnd]}}")
 
@@ -93,15 +93,15 @@ function @arrays:slice {
 
 	local I=1 IdxStart=0 Idx=""
 	for Idx ( ${(-)argv} $(( ${#Array} + 1 )) ) {
-		local -i IdxEnd                                                                                                                                    
-		(( IdxEnd = Idx - 1 ))                                                                                                                      
-		local -a Slice=()                                                                                                                                
-		${(ze)Cmds}                                                                                                                                            
-		local Output="$(typeset -p Slice)"                                                                                              
+		local -i IdxEnd
+		(( IdxEnd = Idx - 1 ))
+		local -a Slice=()
+		${(ze)Cmds}
+		local Output="$(typeset -p Slice)"
 		print -- "${Output/Slice/${ArrayName}${IdxStart}}"
 
-		(( I++ ))                                                                                                                                     
-		(( IdxStart = Idx ))                                                                                                                                                     
+		(( I++ ))
+		(( IdxStart = Idx ))
 	}
 }
 
@@ -123,7 +123,7 @@ function @arrays:removeIndices {
 }
 
 function @args:parse:generatePattern {
-	emulate -L zsh; options[extendedglob]=on
+	emulate -L zsh; setopt extendedglob
 
 	(( ARGC )) || { return 1 }
 
@@ -200,7 +200,7 @@ function @args:parse:match {
 }
 
 function __@args:parse {
-	emulate -L zsh; options[extendedglob]=on
+	emulate -L zsh; setopt extendedglob
 
 	local OriginalArgs=("${(z@)1}")
 	local Args=("${(z@)${(s.=.)1}}")
