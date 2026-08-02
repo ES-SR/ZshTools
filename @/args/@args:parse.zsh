@@ -12,7 +12,7 @@ function @array:toAssoc @assoc:fromArray {
 	} else {
 		unset Name
 	}
-	set -- "${(@)argv:#(#s)(#e)}"	
+	#set -- "${(@)argv}"
 	local -A Assoc
 	(( ARGC )) && { 
 		Assoc=(${${(e):-{1..$ARGC}}:^argv})
@@ -116,7 +116,7 @@ function @arrays:removeIndices {
 
 	local ArrayName=${1:?}
 	shift
-	local -a Array=(${(P)ArrayName})
+	local -a Array=("${(@P)ArrayName}")
 
 	local -aU Indices=($(@arrays:indices:normalize $ArrayName "${(@)argv}"))
 	local Idx
@@ -125,7 +125,7 @@ function @arrays:removeIndices {
 	}
 
 	local Output="$(typeset -p Array)"
-	print -- "${Output/Array/${ArrayName}}"
+	print -r -- "${Output/Array/${ArrayName}}"
 }
 
 function @args:parse:generatePattern {
@@ -188,7 +188,7 @@ function @args:parse:match {
 
 	local -A Assoc=()
 	if [[ ${(tP)1} == "array"* ]] {
-		local -a Array=("${(@)${(P)1}:#(#s)(#e)}")
+		local -a Array=("${(@)${(P)1}}")
 
 		Assoc=(${${(e):-{1..${#Array}}}:^Array})
 	} elif [[ ${(tP)1} == "assoc"* ]] {
@@ -208,8 +208,12 @@ function @args:parse:match {
 function __@args:parse {
 	emulate -L zsh; setopt extendedglob
 
-	local OriginalArgs=("${(z@)1}")
 	local Args=("${(@s.=.)${(z)1}//(#m)*/${(Q)MATCH}}")
+	(( $#Args == 1 )) && {
+		Args=("${(@)Args:#(#s)(#e)}")
+	}
+	Args=("${(@)Args//(#m)*/${(q+)MATCH}}")
+	local OriginalArgs=("${(@)Args}")
 	shift
 
 	local -A Specs
@@ -230,11 +234,12 @@ function __@args:parse {
 
 		local -A SpecMatches=($(@args:parse:match IndexedArgs ${Pattern}))
 
-		Matches+=( [${Name}]=${(j.:.)${(k)SpecMatches}} )
+		Matches+=( [${Name}]=${(j.:.)${(-k)SpecMatches}} )
 		local Output="$(typeset -p SpecMatches)"
 		print -- "${Output/SpecMatches/${Name}}"
 	}
 
+	local -i Null=0
 	local -aU DirtyArgs=(${(zs.:.)=Matches})
 	@arrays:slice Args _ "${(@)DirtyArgs}"
 	eval "$(@arrays:slice Args _ ${(zs.:.)=Matches})"
@@ -253,18 +258,21 @@ function __@args:parse {
 			(( MatchCount++ ))
 			local ArgName="Args$((Match+1))"
 			local -a PossibleArgs=("${(@P)ArgName}")
-			SpecArr+=( "${(@)PossibleArgs[1,${MaxVals/+/${#PossibleArgs}}]}" )
+			SpecArr+=( "${(@)${(@)PossibleArgs[1,${MaxVals/+/${#PossibleArgs}}]}//(#m)*/${(Q)MATCH}}" )
 			DirtyArgs+=( {$Match..$((Match+${#SpecArr}))} )
 		}
 		if [[ $MaxVals == "Null" ]] {
 			SpecArr+=("${(@)MatchIdxs:|DirtyMatchIdxs}")
 		}
+
+		SpecArr=("${(@)SpecArr//(#m)*/${(Q)MATCH}}")
 		DirtyMatchIdxs+=($MatchIdxs)
 		local Output="$(typeset -p1 SpecArr)"
 		print -r -- "${Output/SpecArr/${SpecName}}"
 	}
-	local -a CleanArgv=("${(@)Args}")
+	local -a CleanArgv=("${(@)Args//(#m)*/${(Q)MATCH}}")
 	eval "$(@arrays:removeIndices CleanArgv "${(@)DirtyArgs}")"
+	local -a CleanArgv=("${(@)CleanArgv//(#m)*/${(Q)MATCH}}")
 	local -a SplitArgs=()
 	local I=1 Idx=1
 	while (( Idx > 0 )) {
@@ -279,14 +287,13 @@ function __@args:parse {
 	for P1 P2 ( "${(@)SplitArgs}" ) {
 		CleanArgv=( "${(z@)${CleanArgv}/${P1} ${P2}/"${P1}=${P2}"}" )
 	}
-	CleanArgv=("${(@)CleanArgv:#(#s)(#e)}")
 	local Output="$(typeset -p1 CleanArgv)"
 	print -r -- "${Output/CleanArgv/Argv}"
 }
 function __@args:parse:bridge {
 	emulate -L zsh; setopt extendedglob
 
-	local PackedArgs="${(@)argv//(#m)*/${(q+)MATCH}}"
+	local PackedArgs="${(@)${(A@)argv//\\/\\\\}//(#m)*/${(q+)${(q)MATCH}}}"
 	print -r -- "eval \"\$(__@args:parse \"${PackedArgs}\" \"\${(@)argv}\")\""
 }
 
