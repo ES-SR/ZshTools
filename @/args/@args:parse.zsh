@@ -1,301 +1,207 @@
-#!/bin/zsh
-##  @args:parse
 
-() {
 
-function @array:toAssoc @assoc:fromArray {
-	emulate -L zsh; setopt extendedglob
-
-	local Name=${(k)parameters[(I)${1:?}]}
-	if [[ ${(tP)Name} == "assoc"* ]] {
-		shift
-	} else {
-		unset Name
-	}
-	#set -- "${(@)argv}"
-	local -A Assoc
-	(( ARGC )) && { 
-		Assoc=(${${(e):-{1..$ARGC}}:^argv})
-	}
-	local Output="$(typeset -p1 Assoc)"
-	(( ${+Name} )) && {
-		Output="${Output/Assoc/${Name}}"
-	}
-	print -r -- "${Output}"
-}
-
-function @assoc:toArray @array:fromAssoc {
-	emulate -L zsh; setopt extendedglob
-
-	local Name=${(k)parameters[(I)${1:?}]}
-	if [[ ${(tP)Name} == "array"* ]] {
-		shift
-	} else {
-		unset Name
-	}
-	(( ARGC%2 )) && {
-		argv+=(NULL)
-		local NULL=1
-	}
-	local -A Assoc=("${(@)argv}")
-	local -a Array=(${()=${(-k)Assoc//(#m)(*)/"${MATCH}" "${Assoc[$MATCH]}"}})
-	(( NULL )) && {
-		Array=(${Array/NULL/})
-	}
-	local Output="$(typeset -p1 Array)"
-
-	(( $+Name )) && {
-		Output="${Output/Array/${Name}}"
-	}
-	print -r -- "${Output}"
-}
-
-function @arrays:indices:normalize {
-	emulate -L zsh; setopt extendedglob
-
-	local -i ArrSize=0
-	if [[ ${1} = <0-> ]] {
-		(( ArrSize = ${1} ))
-	} else {
-		ArrSize=${(P)#1}
-	}
-	(( ArrSize )) || { return 1 }
-	argv[1]=()
-
-	local -i Idx
-	for Idx ( ${(-u)argv} ) {
-		(( Idx >= 0 )) && { break }
-		local -i NormalizedIdx
-		(( NormalizedIdx = ArrSize + 1 + Idx ))
-		argv=(${argv//(#s)$Idx(#e)/$NormalizedIdx})
-	}
-	print -- $argv
-}
-
-function @arrays:slice {
-	emulate -L zsh; setopt extendedglob
-
-	local ArrayName=${1:?}
-	local -a Array=("${(@P)ArrayName}")
-	argv[1]=()
-
-	local Mode="+"
-	local ModeIdx=${argv[(I)(#s)[-+_](#e)]}
-	(( ModeIdx )) && {
-		Mode=$argv[$ModeIdx]
-		argv[$ModeIdx]=()
-	}
-
-	local -A Modes=(
-		['+']=""
-		['-']=IdxStart++\ IdxEnd++
-		['_']=IdxStart++
-	)
-
-	local -a argv=($(@arrays:indices:normalize $ARGC $argv))
-
-	argv+=($(( ${#Array} + 1 )))
-
-	local -i I IdxStart Idx
-	(( I=1, IdxStart=0 ))
-	for Idx ( ${(-)argv} ) {
-		local -i IdxEnd
-		(( IdxEnd = Idx - 1 ))
-		(( ${Modes[$Mode]} ))
-		local -a Slice=("${(@)Array[$IdxStart, $IdxEnd]}")
-		local Output="$(typeset -p Slice)"
-		print -r -- "${Output/Slice/$ArrayName$IdxStart}"
-
-		(( I++ ))
-		(( IdxStart = Idx ))
-	}
-}
-
-function @arrays:removeIndices {
-	emulate -L zsh
-
-	local ArrayName=${1:?}
-	shift
-	local -a Array=("${(@P)ArrayName}")
-
-	local -aU Indices=($(@arrays:indices:normalize $ArrayName "${(@)argv}"))
-	local Idx
-	for Idx ( ${(O-)Indices} ) {
-		Array[$Idx]=()
-	}
-
-	local Output="$(typeset -p Array)"
-	print -r -- "${Output/Array/${ArrayName}}"
-}
-
-function @args:parse:generatePattern {
-	emulate -L zsh; setopt extendedglob
-
-	(( ARGC )) || { return 1 }
-
-	local Arg
-	for Arg {
-		local FlagName="${Arg//-/_}"
-		local PartJoint="([-_]|)"
-
-		(( ${FlagName[(I)[a-zA-Z0-9]]} )) || {
-			return 1
-		}
-
-		local -a PatternParts=(${(s._.)${FlagName//(#b)([a-z])([A-Z])/$match[1]_$match[2]}})
-		local LongPattern="${(pj.$PartJoint.)PatternParts}"
-		PatternParts=(${PatternParts//(#m)(*)/$MATCH[1]})
-		local ShortPattern="${(pj.$PartJoint.)PatternParts}"
-		local -aU Patterns=( ${LongPattern} ${ShortPattern} )
-		local FullPattern=""
-		(( $#Patterns > 1 )) && {
-			local Long="((-|--|)${Patterns[1]})"
-			local Short="((-|--)${Patterns[2]})"
-			FullPattern="${Long}|${Short}"
-		} || {
-			FullPattern="(-|--)${Patterns}"
-		}
-		local FullPattern="(#s)(#i)(${FullPattern})(#e)"
-		print -- $FullPattern
-	}
-}
-
-function @args:parse:specsParse {
-	emulate -L zsh
-
-	local -A Specs=()
+function __@args:parse:v2 {
+	emulate -LR zsh -o extendedglob -o typesetsilent
+	{ # set -x
+	
+	local -a Specs=("${(@)argv[2,-1]}") FlagNames FlagMaxExtracts FlagPatterns
 	local Spec
-	for Spec {
-		local -a SpecParts=(${(s.:.)Spec})
+	for Spec ("${(@)Specs}") {
+  	local -a SpecParts=("${(@s.:.)Spec}")
 
-		local MaxVals="${${(M)Spec%:${~:-"(+|<->)"}}#:}"
-		SpecParts=(${SpecParts:#$MaxVals})
+    local MaxExtracts="${${(M)Spec%:${~:-"(+|<->)"}}#:}"
+    SpecParts=(${SpecParts:#$MaxExtracts})
+    MaxExtracts=${MaxExtracts:-0}
+
 		local Name=${SpecParts[-1]}
+    SpecParts[-1]=()
 
-		SpecParts[-1]=()
-		local Pattern=${${(j.:.)SpecParts}:-$(@args:parse:generatePattern $Name)}
+    local Pattern=${${(j.:.)SpecParts}:-$(@args:parse:v2:generatePattern "${Name}")}
 
-		Specs+=(
-			[Order]="${Specs[Order]}:${Name}"
-			[${Name}]="Pattern=${(b)Pattern}:MaxVals=${MaxVals:-Null}"
-		)
-	}
-	typeset -p Specs
+    Name="${${${${${Name//,*\//}//\/*./}//[.\/]/}//[^-[:alnum:]]/}//-/_}"
+
+    FlagNames+=("${Name}")
+    FlagPatterns+=("${Pattern}")
+    FlagMaxExtracts+=(${MaxExtracts})
+
+    local -a "${Name}"
+    (( ${MaxExtracts/+/1} )) || {
+    	set -A "${Name}" 0
+    }
+  }
+
+  set -- "${(@P)1}"
+
+  local MetaPat="${(j.|.)FlagPatterns}"
+
+  local -i Idx
+  local -a PositionalArgs FlagInfo=(${"${(@)FlagInfo}":-})
+  while (( ${Idx::=${argv[(I)${~MetaPat}]}} )) {
+    argv[$Idx]=("${${argv[$Idx]}%%=*}" ${"${${(M)${argv[$Idx]}%%=*}#=}":-})
+    local RawFlag="${argv[$Idx]}"
+    local FNIdx=${FlagPatterns//(#m)*/${${${RawFlag}[(r)${~MATCH},(R)${~MATCH}]}:+${FlagPatterns[(ie)$MATCH]}}}
+    local FlagName="${FlagNames[$FNIdx]}"
+    local MaxExtract="${${FlagMaxExtracts[$FNIdx]}/+/${ARGC}}"
+    set -A FlagInfo "${FlagName}:${Idx}:${RawFlag}" "${(@)FlagInfo}"
+    set -A "${FlagName}" "${(@)argv[$((Idx+1)),$((Idx + MaxExtract))]}" "${(@P)FlagName}"
+    (( MaxExtract )) || {
+    	set -A "${FlagName}" $(( "${(P)FlagName:-0}" + 1 ))
+    }
+    set -A PositionalArgs  "${(@)argv[$((Idx+1+MaxExtract)),-1]}" "${(@)PositionalArgs}"
+    argv[$Idx,-1]=()
+  }
+
+  set -A PositionalArgs "${(@)argv}" "${(@)PositionalArgs}"
+
+  local FN
+  for FN ($FlagNames PositionalArgs FlagInfo) {
+  	typeset -p1 -- ${FN}
+  }
+
+} always {
+        set +x
+}
 }
 
-function @args:parse:match {
-	emulate -L zsh; setopt extendedglob
-
-	local -A Assoc=()
-	if [[ ${(tP)1} == "array"* ]] {
-		local -a Array=("${(@)${(P)1}}")
-
-		Assoc=(${${(e):-{1..${#Array}}}:^Array})
-	} elif [[ ${(tP)1} == "assoc"* ]] {
-		Assoc=("${(@kv)${(P)1}}")
-	} else {
-		return 1
-	}
-	shift
-
-	local Pattern
-	for Pattern {
-		local -A Matches=("${(@kv)Assoc[(R)${~Pattern}]}")
-		print -- ${(-k)Matches//(#m)(*)/"$MATCH $Matches[$MATCH]"}
-	}
+function __@args:parse:v2:bridge {
+	print -r -- 'eval "$(__@args:parse:v2 __ArgsParseArgv "${(@)argv}")"' 
 }
 
-function __@args:parse {
-	emulate -L zsh; setopt extendedglob
+alias @args:parse:v2='local -a __ArgsParseArgv=("${(@)argv}"); . <(__@args:parse:v2:bridge)'
 
-	local Args=("${(@s.=.)${(z)1}//(#m)*/${(Q)MATCH}}")
-	(( $#Args == 1 )) && {
-		Args=("${(@)Args:#(#s)(#e)}")
-	}
-	Args=("${(@)Args//(#m)*/${(q+)MATCH}}")
-	local OriginalArgs=("${(@)Args}")
-	shift
+function @args:parse:v2:generatePattern {
+        emulate -LR zsh -o extendedglob -o typesetsilent
 
-	local -A Specs
-	eval "$(@args:parse:specsParse "${(@)argv}")"
-	typeset -p Specs
+        (( ARGC )) || return 1
+        (( ARGC == 1 )) && [[ $1 = (-|--)(#i)(h(elp|)) ]] && {
+                <<-"EOF"
+                        . the following segment is optional
+                        , the following preceding segment is an alternate
+                        / the following segment is applied to the end of each preceding segment
+                EOF
+        return
+        }     
+        
+        local Arg
+        for Arg {                                                                             
+                # 1. Normalize camelCase into required word boundaries (FileDest -> File-Dest)
+                local SpecNorm="${Arg//(#b)([a-z0-9])([A-Z])/$match[1]-$match[2]}"
+                                                     
+                # 2. Split into required words on '-'
+                local -a Words=(${(s.-.)SpecNorm})
+                local -a LongWordPats=()
+                local -a ShortChars=()
 
-	local -A IndexedArgs
-	eval "$(@array:toAssoc IndexedArgs "${(@)Args}")"
+                local Word                                                     
+                for Word ( "${(@)Words}" ) {
+                        # Short flag anchor: first letter of required word stem
+                        ShortChars+=( "${${Word/[^[:alnum:]]/}[1]}" )
+          
+                        # Split word into optional segments on '.'
+                        local -a Segs=( ${(s:.:)Word} )
+                        local -a Stems=() Slashes=() Alts=()
 
-	local -A Matches=()
-	local K="" V=""
-	for K V ( ${(kv)Specs} ) {
-		if [[ $K == "Order" ]] { continue }
-		local Name=${K}
-		local Pattern=""
-		local MaxVals=""
-		eval "${(s.:.)V}"
+                        # Parse individual segment DSL structures
+                        local Seg                             
+                        for Seg  ( "${(@)Segs}" ) {                     
+                                if [[ "$Seg" = *","* ]] { 
+                                        # Handle Stem,Alt1/Alt2 syntax (e.g., ector,y/ies)
+                                        local Stem="${Seg%%,*}"   
+                                        local Rest="${Seg#*,}" 
+                                        local -a AltList=(${(s./.)Rest})
+                                        Stems+=("${Stem}")    
+                                        Slashes+=("")
+                                        Alts+=("${(j.|.)AltList}")
+                                } elif [[ "${Seg}" = *"/"* ]] {
+                                        # Handle Stem/Slash syntax (e.g., Dir/s)
+                                        Stems+=("${Seg%%/*}")
+                                        Slashes+=("${Seg#*/}")
+                                        Alts+=("")
+                                } else {
+                                        Stems+=("${Seg}")                              
+                                        Slashes+=("")
+                                        Alts+=("")
+                                }                        
+                        }                                     
 
-		local -A SpecMatches=($(@args:parse:match IndexedArgs ${Pattern}))
+                        # Pass 1: Backward propagation of slashes to preceding segments
+                        local CurrSlash=""                     
+                        local -i I                  
+                        for (( I=${#Segs}; I>=1; I-- )) {
+                                if [[ -n "${Slashes[$I]}" ]] {    
+                                        CurrSlash="${Slashes[$I]}"
+                                } elif [[ -n "${Alts[$I]}" ]] {
+                                        CurrSlash=""
+                                } else {                                     
+                                        Slashes[$I]="${CurrSlash}"
+                                }                        
+                        }                                
 
-		Matches+=( [${Name}]=${(j.:.)${(-k)SpecMatches}} )
-		local Output="$(typeset -p SpecMatches)"
-		print -- "${Output/SpecMatches/${Name}}"
-	}
+                        # Pass 2: Right-to-left nested group pattern assembly
+                        local WordPat=""               
+                        for (( I=${#Segs}; I>=1; I-- )) {
+                                local Stem="${Stems[$I]}"
+                                local Slash="${Slashes[$I]}"                     
+                                local Alt="${Alts[$I]}"
 
-	local -i Null=0
-	local -aU DirtyArgs=(${(zs.:.)=Matches})
-	@arrays:slice Args _ "${(@)DirtyArgs}"
-	eval "$(@arrays:slice Args _ ${(zs.:.)=Matches})"
-	local -aU DirtyMatchIdxs=()
-	local SpecName=""
-	for SpecName ( ${(s.:.)Specs[Order]} ) {
-		local Pattern=""
-		local MaxVals=""
-		eval ${(s.:.)${Specs[$SpecName]}}
-		local -a SpecArr=()
-		local -a MatchIdxs=()
-		local -i MatchCount=0
-		local Match=""
-		for Match ( ${(s.:.)Matches[$SpecName]} ) {
-			MatchIdxs+=($Match)
-			(( MatchCount++ ))
-			local ArgName="Args$((Match+1))"
-			local -a PossibleArgs=("${(@P)ArgName}")
-			SpecArr+=( "${(@)${(@)PossibleArgs[1,${MaxVals/+/${#PossibleArgs}}]}//(#m)*/${(Q)MATCH}}" )
-			DirtyArgs+=( {$Match..$((Match+${#SpecArr}))} )
-		}
-		if [[ $MaxVals == "Null" ]] {
-			SpecArr+=("${(@)MatchIdxs:|DirtyMatchIdxs}")
-		}
+                                local SegPat="${Stem}"  
+                                [[ -n "${Alt}" ]] && { SegPat="${Stem}(${Alt})" }
 
-		SpecArr=("${(@)SpecArr//(#m)*/${(Q)MATCH}}")
-		DirtyMatchIdxs+=($MatchIdxs)
-		local Output="$(typeset -p1 SpecArr)"
-		print -r -- "${Output/SpecArr/${SpecName}}"
-	}
-	local -a CleanArgv=("${(@)Args//(#m)*/${(Q)MATCH}}")
-	eval "$(@arrays:removeIndices CleanArgv "${(@)DirtyArgs}")"
-	local -a CleanArgv=("${(@)CleanArgv//(#m)*/${(Q)MATCH}}")
-	local -a SplitArgs=()
-	local I=1 Idx=1
-	while (( Idx > 0 )) {
-		Idx=${OriginalArgs[(In.I.)*=*]}
-		(( Idx )) && {
-			SplitArgs+=(${(s.=.)OriginalArgs[$Idx]})
-		}
-		(( I++ ))
-	}
-	SplitArgs=(${SplitArgs:*CleanArgv})
-	local P1 P2
-	for P1 P2 ( "${(@)SplitArgs}" ) {
-		CleanArgv=( "${(z@)${CleanArgv}/${P1} ${P2}/"${P1}=${P2}"}" )
-	}
-	local Output="$(typeset -p1 CleanArgv)"
-	print -r -- "${Output/CleanArgv/Argv}"
+                                if (( I == ${#Segs} )) {           
+                                        if [[ -n "${Alt}" ]] {      
+                                                WordPat="${SegPat}"         
+                                        } elif [[ -n "${Slash}" ]] {
+                                                WordPat="${Stem}(${Slash}|)"
+                                        } else {
+                                                WordPat="${SegPat}"
+                                        }                                                  
+                                } else {
+                                        WordPat="${SegPat}(${Slash:+${Slash}|}${WordPat}|)"
+                                }
+                        }                           
+
+                        LongWordPats+=("${WordPat}")
+                }
+
+                # 3. Combine long forms and short forms
+                local PartJoint="([-_.]|)"
+                local LongPattern="${(pj.$PartJoint.)LongWordPats}"
+                local ShortPattern="${(pj.$PartJoint.)ShortChars}"
+
+                local FullPattern=""
+                if ! [[ "${LongPattern}" = "${ShortPattern}" ]] {
+                        FullPattern="((-|--|)${LongPattern})|((-|--)${ShortPattern})"
+                } else {
+                        FullPattern="(-|--)${LongPattern}"
+                }
+
+                # Wrap in Zsh string anchors, case insensitivity, and optional assignment matching
+                print -r -- "(#s)(#i)(${FullPattern})(=*|)(#e)"
+        }
 }
-function __@args:parse:bridge {
-	emulate -L zsh; setopt extendedglob
 
-	local PackedArgs="${(@)${(A@)argv//\\/\\\\}//(#m)*/${(q+)${(q)MATCH}}}"
-	print -r -- "eval \"\$(__@args:parse \"${PackedArgs}\" \"\${(@)argv}\")\""
-}
 
-alias @args:parse='. <(__@args:parse:bridge "${(@)argv}")'
-}
+: <<"Examples.@args:parse:v2"
+	function test@args:parse:testFunction {
+    	@args:parse:v2 --:NotOpts:+
+        set -- "${(@)PositionalArgs}"
+
+        @args:parse:v2 Help Debug:1 Verbose:+ --my-spec:MySpec:3 FileDir/s.ector,y/ies:+ UnusedFlag
+
+        print -Pl -- "%UHelp%u" "${(@)Help}" \
+                "%UDebug%u" "${(@)Debug}" \    
+                "%UVerbose%u" "${(@)Verbose}" \
+                "%UUnusedFlag%u" "${(@)UnusedFlag}" \
+                "%UMySpec%u" "${(@)MySpec}" \                  
+                "%UNotOpts%u" "${(@)NotOpts}" \              
+                "%UFileDirectories%u" "${(@)FileDirectories}" \
+                "%UPositionalArgs%u" "${(@)PositionalArgs}" \
+                "%UFlagInfo%u" "${(@)FlagInfo}"
+                              
+	}                                                                                               
+	test@args:parse:testFunction \                                   
+        one --my-spec 1 2 3 4 -h debug=hello=world --help --V "many words" before another flag \
+        FileDirs {a..d} FileDirectory fd FileDirectories {A..D} \            
+        -D verbose second VerboseFlag occurance values help \
+        -- these verbose "not-opts" have other flag names" like debug mixed in
+Examples.@args:parse:v2
