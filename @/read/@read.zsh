@@ -14,11 +14,16 @@ function @read {
 	)
 
 	# --- inline argument parser (range-based) ---------------------------------
+	# EVERY arg is quoted once up front, so the whole parser runs on tokens that
+	# are never empty and never split: a newline, a space, '' and ' | ' all
+	# survive the index zip, the (z) splits and the index arithmetic. Args are
+	# unquoted only where their VALUE is used (delimiters, flag values).
 	# Flag name -> match pattern; name -> value count (+ = "rest"). Split any
 	# flag=val token into two, find each flag's occurrences, expand them to the
 	# argv indices each flag consumes (start .. start+count). Delimiter args are
 	# argv at the indices no flag consumed; a flag's values are its consumed
 	# indices minus its own start indices. Verbose takes the fd to write to.
+	set -- "${(@q+)argv}"
 	local -A Flags=(
 		UserLogic  '--'
 		EmptyReads '((-|--|)(Empty|)([-_]|)Read(s|)|(-|--)(E|)([-_]|)R)'
@@ -32,9 +37,9 @@ function @read {
 	local -A IdxdArgv=(${${:-{1..$ARGC}}:^argv})
 	local AssignmentPattern="(#i)((${(j.)|(.)Flags}))(=*)"
 	local -a Found=(${IdxdArgv[(R)${AssignmentPattern}]})
-	# quote every arg first so the (z) split only separates the "flag val" pair
-	# made here (a ' | ' or '' delimiter survives), then unquote
-	(( ${#Found} )) && { set -- "${(@Q)${(@z)${(@)${(@q-)argv}//(#m)(${~${(j.|.)Found}})/${MATCH%%=*} ${MATCH#*=}}}}" }
+	# argv is already quoted, so the (z) split separates only the "flag val"
+	# pair made here; ${~...} makes the found tokens a live alternation
+	(( ${#Found} )) && { set -- ${(z)argv//(#m)(${~${(j.|.)Found}})/${MATCH%%=*} ${MATCH#*=}} }
 
 	local -a ArgvIdxs=({1..$ARGC})
 	IdxdArgv=(${ArgvIdxs:^argv})
@@ -49,32 +54,50 @@ function @read {
 	ArgvIdxs=(${ArgvIdxs:|DirtyIdxs})
 	local -a Args=(${ArgvIdxs//(#m)*/${IdxdArgv[$MATCH]}})
 
+	# print options: whatever is left that spells a print flag, kept in order
+	# and passed through to every output print. Taken from the LEFTOVERS rather
+	# than given a Flags entry, so @read's own short forms win first -- -C and
+	# -CS are ChunkSize, and only an unclaimed -C would reach print. A literal
+	# -n or -l meant as a DELIMITER has to be written as a pattern that is not
+	# a bare option, e.g. [-]n, the same escape hatch [,] gives the separator.
+	local PrintOptPat='(#s)-[abcCDfilmnNoOPRrsSuXxz]*(#e)'
+	local -a PrintOpts=( ${(@Q)${(M)Args:#${~PrintOptPat}}} )
+	Args=( ${Args:#${~PrintOptPat}} )
+
 	for FlagName ( ${(k)Flags} ) { local -a $FlagName }
 	local -a ValIdxs
 	for FlagName ( ${(k)FoundFlags} ) {
 		RangeIdxs=( ${(Qz)FlagRanges[$FlagName]} ) ; StartIdxs=( ${(s.:.)FoundFlags[$FlagName]} )
 		[[ ${FlagValCounts[$FlagName]} == 0 ]] && { ValIdxs=( $RangeIdxs ) } || { ValIdxs=( ${RangeIdxs:|StartIdxs} ) }
-		set -A $FlagName "${(@)ValIdxs//(#m)*/${IdxdArgv[$MATCH]}}"
+		set -A $FlagName "${(@Q)${(@)ValIdxs//(#m)*/${IdxdArgv[$MATCH]}}}"
 	}
 
 	# comma-separated groups: last element is the group's out-delimiter, the
-	# rest are in-delimiter patterns. Group number and member number are
-	# declaration order, fixed here; each group's whole-pattern alternation
-	# (GroupDelims) is built once up front, and doubles as an exact DelimGroup
-	# key so single-group G patterns resolve without a scan. StarGroup maps a
-	# member's star-key to its group, so a group's members are a reverse lookup.
+	# rest are in-delimiter patterns. An EMPTY out-delimiter removes its
+	# in-delimiters from the stream instead of swapping them. The separator test
+	# is anchored against the QUOTED token, so only a bare , separates groups;
+	# a comma meant as a delimiter is written as a pattern that is not a bare
+	# comma -- [,] is the idiomatic spelling (a backslash only escapes
+	# pattern-special characters, so \, stays two literal characters).
+	# Each member is unquoted as it is stored, at the point its value is used.
+	# Group number and member number are declaration order, fixed
+	# here; each group's whole-pattern alternation (GroupDelims) is built once
+	# up front, and doubles as an exact DelimGroup key so single-group G
+	# patterns resolve without a scan. StarGroup maps a member's star-key to
+	# its group, so a group's members are a reverse lookup.
 	local -A StarDelims=() StarGroup=() DelimGroup=() DelimMember=() GroupDelims=()
-	local -a OutDelims=() Group=()
+	local -a OutDelims=() Group=() AllDelims=()
 	local Arg Delim
 	local -i MemberNum=0
 	for Arg ( "${(@)Args}" , ) {
-		[[ $Arg == , ]] && {
+		[[ $Arg == (#s),(#e) ]] && {
 			(( ${#Group} >= 2 )) && {
 				OutDelims+=( "${Group[-1]}" )
-				GroupDelims[${#OutDelims}]=${(j.|.)Group[1,-2]}
-				DelimGroup[(${(j.|.)Group[1,-2]})]=${#OutDelims}
+				GroupDelims[${#OutDelims}]=${(j.|.)${Group[1,-2]//(#m)*/(${MATCH})}}
+				AllDelims+=( ${GroupDelims[${#OutDelims}]} )
+				DelimGroup[(${(j.|.)${Group[1,-2]//(#m)*/(${MATCH})}})]=${#OutDelims}
 				(( MemberNum = 0 ))
-				for Delim ( ${Group[1,-2]} ) {
+				for Delim ( ${Group[1,-2]//(#m)*/(${MATCH})} ) {
 					DelimGroup[$Delim]=${#OutDelims}
 					DelimMember[$Delim]=$(( ++MemberNum ))
 					StarDelims[*${Delim}*]=$Delim
@@ -82,20 +105,58 @@ function @read {
 				}
 			}
 			Group=()
-		} || { Group+=( "$Arg" ) }
+		} || { Group+=( "${(Q)Arg}" ) }
 	}
 
 	# selector entries drive the default choice: <S|L|E>:<slice> filters the
 	# working id set by that table -- the slice (raw zsh subscript text: 1,
 	# -1, 2,4) picks from the RESTRICTED sorted unique VALUE list, so a pick
-	# is a whole value-class and ties never split -- and a bare G or M entry
-	# sets how the survivors resolve into DelimPat. The default chain is the
-	# design default: the whole group of the longest match at the earliest
-	# start. A slice is split into its two bounds (SliceA,SliceB) because a
-	# range comma has to be literal text inside the subscript brackets.
+	# is a whole value-class and ties never split. Every entry is a filter;
+	# the survivors always resolve to their groups' patterns. The default
+	# chain is the design default: the whole group of the longest match at the
+	# earliest start. A slice is split into its two bounds (SliceA,SliceB)
+	# because a range comma has to be literal text inside the subscript
+	# brackets.
+	# every declared delimiter, in declaration order, as ONE alternation. Each
+	# group is already (m1)|(m2) with its members wrapped, so this is
+	# ((m1)|(m2)|(m3)|(m4)) -- the order the caller wrote, which is the order
+	# zsh resolves at each position.
+	local AllDelimPat="(${(j.|.)AllDelims})"
+
 	local -A TableByLetter=( S Starts L Lens E Ends )
-	local -a Choices=( S:1 L:-1 )
-	local Mode='G' ArrName='' Slice='' SliceA='' SliceB=''
+	# -- entries REPLACE the default filter chain. They are filter specs, not
+	# code: the same <S|L|E>:<slice> grammar, applied to the group phase and
+	# then to the member phase. There is no DelimPat or REPLY any more --
+	# consumption reads the tables, so a pattern handed back by user code has
+	# nothing left to attach to.
+	local -a Choices=( "${(@)UserLogic}" )
+	(( ${#Choices} )) || Choices=( S:1 L:-1 )
+	# The selection compiles to ONE expansion, chosen here and never inspected
+	# again. (S) searches for the match starting closest to the front (# and ##)
+	# or closest to the end (% and %%); of the matches at that position, the
+	# single form takes the shortest and the doubled form the longest. B, E and
+	# N return begin, one-past-end and length, so the pick and its position come
+	# back together -- no table, no sort, no candidate list.
+	#   S:1 L:1 -> #    S:1 L:-1 -> ##    S:-1 L:1 -> %    S:-1 L:-1 -> %%
+	# Empty SelExpr means no specs were given: consumption takes the bulk path
+	# that swaps every match in the span at once.
+	local SelOp='' SelIdx='' SelExpr='' SSpec=''
+	(( ${#UserLogic} )) && {
+		# the S spec's SIGN chooses the operator family -- # counts matches
+		# forward from the front, % counts the same matches backward from the end
+		# -- and its MAGNITUDE becomes I:N:, the Nth match in that direction. The
+		# L spec's sign doubles the operator: single takes the shortest match at
+		# the chosen position, doubled the longest.
+		SSpec=${${(M)Choices:#(#i)s:*}#?:}
+		SelOp=${${SSpec:+${${SSpec%%,*}:#-*}}:+#}
+		SelOp=${SelOp:-${SSpec:+%}}
+		SelOp=${SelOp:-#}
+		SelOp=${SelOp}${${${(M)Choices:#(#i)l:-*}:+${SelOp}}:-}
+		SelIdx=${${SSpec##[-+]}%%,*}
+		SelExpr='${(SBENI.'${SelIdx:-1}'.)BuffStr'${SelOp}'${~AllDelimPat}}'
+	}
+
+	local ArrName='' Slice='' SliceA='' SliceB=''
 
 	ChunkSize[1]=${${ChunkSize[1]}:-8}
 	EmptyReads[1]=${${EmptyReads[1]}:-5}
@@ -107,13 +168,33 @@ function @read {
 	local -i EmptyReadsMask=$(( (2**EmptyReads - 1) << HistSize ))
 	local -i TimeoutHist=0
 
+	# the timeout curve, ported from the tiered-history @read.1781416012.zsh onto
+	# this two-partition register: the empty-read run decays the BASE
+	# multiplicatively, which is always downward whatever Timeout is, while the
+	# history run drives a BOUNDED exponent that can only pull the value toward
+	# 1, never invert it. Putting the empty-read run in the exponent instead
+	# (the old (Timeout*(1+HB/HistSize))**((EmptyReads+ERB)/EmptyReads)) made
+	# empty reads LENGTHEN the poll for any Timeout > 1.
+	#   T = (Timeout * (EmptyReads+1-ERB)/(EmptyReads+1)) ** (ExpHi - ExpSpan*HB/HistSize)
+	# ERB 0..EmptyReads scales the base from 1x down to 1/(EmptyReads+1); HB
+	# 0..HistSize sweeps the exponent from ExpHi down to ExpLo. The bounds are
+	# @numbers:featureScale in closed form -- the source list is a linear ramp,
+	# so scaling it is just the endpoints, and no subshell. ExpHi is 1 so that
+	# the idle state (ERB and HB both 0, which the tiered register never had,
+	# its level counter starting at 1) returns the timeout the caller asked
+	# for, untransformed. ExpLo must never reach 0, which would collapse every
+	# fully-decayed state to 1 second whatever Timeout is. The span between
+	# them is just what the bounds leave, not a figure to preserve.
+	local -F ExpLo=0.01 ExpHi=1.0
+	local -F ExpSpan=$(( ExpHi - ExpLo ))
+
 	# happy path pre-calculated: an empty read shifts a 1 into BOTH partitions,
 	# so every reachable escalation state carries HistoryBits == EmptyReadBits.
 	# Both partitions are always a contiguous run of 1s (grow (x<<1)|1, shrink
 	# >>1, clear wholesale). TOTable[0] is the first read's timeout.
 	local -A TOTable=()
 	local -i EmptyReadBits=0
-	for EmptyReadBits ( {0..$EmptyReads} ) { TOTable[$(( ((2**EmptyReadBits-1) << HistSize) | (2**EmptyReadBits-1) ))]=$(( (Timeout*(1+(1.0*EmptyReadBits/HistSize)))**(((1.0*EmptyReads)+EmptyReadBits)/EmptyReads) )) }
+	for EmptyReadBits ( {0..$EmptyReads} ) { TOTable[$(( ((2**EmptyReadBits-1) << HistSize) | (2**EmptyReadBits-1) ))]=$(( (1.0*Timeout*(EmptyReads+1-EmptyReadBits)/(EmptyReads+1)) ** (ExpHi - ExpSpan*EmptyReadBits/HistSize) )) }
 	local CurTimeout=${TOTable[0]}
 
 	# verbose sink: a fresh fd dup'd from the requested one, or /dev/null, so
@@ -130,41 +211,40 @@ function @read {
 	local -a MatchIds=() reply=()
 	local -aU __MatchIds=()
 	local -A Starts=() Lens=() Ends=() Texts=() InDelims=() Groups=() Members=()
-	local DelimPat='' REPLY='' Pattern=''
+	local Pattern=''
 
-	# resolution chosen ONCE: the user's entries, or the default selector chain,
-	# in DelimSelectionLogic. Entries are expansion text, joined with nothing
-	# and run by (e) every iteration (left to right, so serial entries keep
-	# their order); values are set with ${Var::=...}, nested arrays need an
-	# explicit (@), and the tables are empty on iterations without a match --
-	# the default is one ${MatchIds:+...} around all its entries, so an empty
-	# match set never seeds __MatchIds (an empty (A)::= leaves one '' element,
-	# which would resolve to a bogus DelimPat). The chain is ONE expansion over
-	# the entries: each stage maps the live ids to their values (restricted),
-	# sorts unique, slices the value list, reverse-looks-up the picked values'
-	# keys, and intersects with the live set -- ArrName/Slice read the entry's
-	# MATCH before the inner map clobbers it. Its expansion result is the
-	# per-stage tab columns, which the loop prints to VerboseFD.
-	local -a DefaultLogic=(
-		'${MatchIds:+'
-		'${${(A)__MatchIds::=${(@)MatchIds}}:+}${${Mode::=G}:+}'
-		'${(F)${(@)Choices//(#m)*/${${(M)MATCH:#[GM]}:+Mode ${Mode::=$MATCH}}${${MATCH:#[GM]}:+\tArrName ${ArrName::=${TableByLetter[${(U)MATCH[1]}]}}\tSlice ${Slice::=${${MATCH[3,-1]}:-1}}${${SliceA::=${Slice%%,*}}:+}${${SliceB::=${Slice#*,}}:+}\tPVals ${(A)PVals::=${(Au-)${(@)__MatchIds//(#m)*/${${(P)ArrName}[$MATCH]}}}}\tMVals ${(A)MVals::=${(Au)${(@)PVals[${SliceA},${SliceB}]}}}\tMIds ${(A)MIds::=${(@k)${(P)ArrName}[(R)(${(j.|.)MVals})]}}\t__MatchIds ${(A)__MatchIds::=${(@)__MatchIds:*MIds}}}}}'
-		'${${${(M)Mode:#M}:+${DelimPat::=${(uj.|.)${(@)__MatchIds//(#m)*/${InDelims[$MATCH]}}}}}:+}${${${Mode:#M}:+${DelimPat::=${(uj.|.)${(@)${(u@)__MatchIds//(#m)*/${Groups[$MATCH]}}//(#m)*/(${GroupDelims[$MATCH]})}}}}:+}'
-		'}'
-	)
-	local -a DelimSelectionLogic=( ${UserLogic:-$DefaultLogic} )
+	# The match table, built in ONE pass. MBEGIN, MEND and MATCH are all live
+	# per match, and the group and member fall out of the same (k) reverse
+	# lookup consumption already uses -- so no walk over groups and no separate
+	# scan per member. NOTHING CALLS THIS YET: consumption resolves each match
+	# inline and needs no table. It is kept because filter specs (-- S:1 L:-1)
+	# need it, and because it is the cheap way to get one: a single // over the
+	# same alternation the swap uses.
+	local MatchExtraction='${MatchNum::=1}${${BuffStr//(#m)(${~AllDelimPat})/${MATCH:+${Starts[M$MatchNum]::=$MBEGIN}${Ends[M$MatchNum]::=$MEND}${Lens[M$MatchNum]::=${#MATCH}}${Texts[M$MatchNum]::=$MATCH}${InDelims[M$MatchNum]::=${(k)DelimGroup[(K)$MATCH]}}${Groups[M$MatchNum]::=${DelimGroup[(k)$MATCH]}}${Members[M$MatchNum]::=${DelimMember[(k)$MATCH]}}${MatchIds[$MatchNum]::=M$MatchNum}${MatchNum::=$((MatchNum+1))}}}:+}'
 
 	# loop workspace, declared once
 	local -a PVals=() MVals=() MIds=() Present=() GrpStars=()
 	local -i MatchNum=0 BytesRead=0 ReadReturn=0
+	local Over=''
 	local DelimGrp='' DelimMbr='' Head='' BuffStr='' Chunk='' SelectionOut=''
+	local WinGrp='' Win='' OutDelim='' SpanEnd='' NextStart=''
+	local WinPat=''
+	local -a OutParts=()
+	local SubMark='{{}}'
+	local -a SafeEnds=() GrpStarts=()
+	local -i SpanMade=0 LastEnd=0
+	local -a SelInfo=()
 
 	# the only loop: one chunked read per iteration, then three expansions
 	{
 		while (( TimeoutHist >= 0 )) {
+			# SpanMade carries from the previous pass: while passes keep consuming
+			# matches the buffer still holds resolvable delimiters, so resolve it
+			# again rather than reading more input on top. A pass that consumes
+			# nothing clears it, which is exactly when more input is needed. The
+			# skipped read reports as a success so the register decays normally.
 			Chunk='' BytesRead=0
-			sysread -c BytesRead -s $ChunkSize[1] -t $CurTimeout Chunk
-			ReadReturn=$?
+			(( SpanMade )) && { ReadReturn=0 } || { sysread -c BytesRead -s $ChunkSize[1] -t $CurTimeout Chunk; ReadReturn=$? }
 			print -u $VerboseFD -- "BytesRead: ${BytesRead}\tTO: ${CurTimeout}\tHist: ${(l.63..0.)$(( [##2] TimeoutHist ))}\tReturn: ${ReadReturn} - ${ReturnValueMeanings[ReadReturn+1]}"
 
 			# expansion 1: register update -- an empty read shifts a 1 into both
@@ -173,7 +253,7 @@ function @read {
 			# -- then the NEXT read's timeout, memoized by raw register value.
 			# Partition bit lengths: [##2] with one trailing 0 stripped
 			# (0 -> "" -> 0, 2^k-1 -> k), riding the contiguous-run invariant.
-			: ${${${ReadReturn:#0}:+${TimeoutHist::=$(( ((TimeoutHist & ~HistMask) << 1) | (2**HistSize) | ((((TimeoutHist & HistMask) << 1) | 1) & HistMask) ))}}:-${TimeoutHist::=$(( TimeoutHist & EmptyReadsMask ? TimeoutHist & HistMask : TimeoutHist >> 1 ))}}${CurTimeout::=${TOTable[$TimeoutHist]:-${TOTable[$TimeoutHist]::=$(( (Timeout*(1+(1.0*${#${${:-$(( [##2] TimeoutHist & HistMask ))}%0}}/HistSize)))**(((1.0*EmptyReads)+${#${${:-$(( [##2] (TimeoutHist & EmptyReadsMask) >> HistSize ))}%0}})/EmptyReads) ))}}}
+			: ${${${ReadReturn:#0}:+${TimeoutHist::=$(( ((TimeoutHist & ~HistMask) << 1) | (2**HistSize) | ((((TimeoutHist & HistMask) << 1) | 1) & HistMask) ))}}:-${TimeoutHist::=$(( TimeoutHist & EmptyReadsMask ? TimeoutHist & HistMask : TimeoutHist >> 1 ))}}${CurTimeout::=${TOTable[$TimeoutHist]:-${TOTable[$TimeoutHist]::=$(( (1.0*Timeout*(EmptyReads+1-${#${${:-$(( [##2] (TimeoutHist & EmptyReadsMask) >> HistSize ))}%0}})/(EmptyReads+1)) ** (ExpHi - ExpSpan*${#${${:-$(( [##2] TimeoutHist & HistMask ))}%0}}/HistSize) ))}}}
 			BuffStr+=$Chunk
 
 			# expansion 2: all match metadata, consuming nothing. Present is the
@@ -181,217 +261,64 @@ function @read {
 			# the group number stored first, each group's star-keys (StarGroup
 			# reverse lookup, assigned so :* has a name) intersected with Present,
 			# and each present member scanned over BuffStr to fill the id tables.
-			MatchIds=() Starts=() Lens=() Ends=() Texts=() InDelims=() Groups=() Members=()
-			: ${MatchNum::=1}${(A)Present::=${(k)StarDelims[(K)$BuffStr]}}${${(u)Present//(#m)*/${StarGroup[$MATCH]}}//(#m)*/${DelimGrp::=$MATCH}${${(A)GrpStars::=${(k)StarGroup[(R)$DelimGrp]}}:+}${${GrpStars:*Present}//(#m)*/${Delim::=${StarDelims[$MATCH]}}${DelimMbr::=${DelimMember[$Delim]}}${${BuffStr//(#m)${~Delim}/${MBEGIN:+${Starts[M$MatchNum]::=$MBEGIN}${Ends[M$MatchNum]::=$MEND}${Lens[M$MatchNum]::=${#MATCH}}${Texts[M$MatchNum]::=$MATCH}${InDelims[M$MatchNum]::=$Delim}${Groups[M$MatchNum]::=$DelimGrp}${Members[M$MatchNum]::=$DelimMbr}${MatchIds[$MatchNum]::=M$MatchNum}${MatchNum::=$((MatchNum+1))}}}:+}}}
+			# The tables are reset with plain assignments, not inside the
+			# expansion: ${(A)MatchIds::=} leaves ONE empty element, not none.
+			MatchIds=() __MatchIds=() Starts=() Lens=() Ends=() Texts=() InDelims=() Groups=() Members=()
 
-			# expansion 3: ONE resolution per iteration -- the chosen logic reads
-			# the tables, may mutate BuffStr in place, and leaves its choice in
-			# DelimPat (or REPLY). Both empty defers to the next iteration. The
-			# expansion's text is the verbose output; :+ supplies its newline, so
-			# an empty result prints nothing. Never print -l here: with no args
-			# it still prints a newline, the same reason every output print is -n.
-			DelimPat='' REPLY=''
-			SelectionOut=${(e)${(j..)DelimSelectionLogic}}
-			print -nu $VerboseFD -- ${SelectionOut:+$SelectionOut$'\n'}
-
-			# batch consumption: everything through the pattern's last occurrence
-			# -- kept clear of the buffer end, honoring deferral -- prints with
-			# every occurrence swapped for its own group's out-delimiter: an exact
-			# DelimGroup hit for a declared delimiter or a single-group G pattern,
-			# else [(k)$MATCH] pattern-keys resolve each matched text back to its
-			# group. Matches of unchosen delimiters inside the span print raw; a
-			# delimiter left past the span is picked up next iteration (the EOF
-			# drain runs these expansions too). An empty Pattern or a zero-width
-			# match gives an empty Head: nothing prints, the buffer stays.
-			Pattern=${DelimPat:-$REPLY}
-			Head=${Pattern:+${(M)${BuffStr[1,-2]}##*${~Pattern}}}
-			print -rn -- ${Head:+${Head//(#m)${~Pattern}/${OutDelims[${DelimGroup[$Pattern]:-${DelimGroup[(k)$MATCH]}}]}}}
+			# expansion 2: extraction AND resolution in one pass. The chosen
+			# logic reads the tables it just filled, may mutate BuffStr in place,
+			# and leaves its choice in DelimPat (or REPLY). Both empty defers to
+			# the next iteration. What the expansion yields is the verbose
+			# output; :+ supplies its newline, so an empty result prints nothing.
+			# Never print -l here: with no args it still prints a newline, the
+			# same reason every output print is -n.
+			# ONE pass. The whole declared alternation, in declaration order, is
+			# matched against the span, and each match resolves to ITS OWN group
+			# through DelimGroup[(k)$MATCH]. Nothing selects a group or a member
+			# first: which alternative wins at a position is zsh's own rule, so
+			# member order is the caller's lever again -- ([el]#|o) and (o|[el]#)
+			# give different answers, exactly as they do outside @read.
+			# The span still stops one character short of the buffer end, so a
+			# delimiter that may still be growing is deferred to the next read.
+			# ${MATCH:+} keeps a zero-width match from emitting a delimiter.
+			# A match that reaches the buffer end may still be growing, so it and
+			# everything after its START is held for the next read. MEND and MBEGIN
+			# are live in the same pass that does the swapping, so the deferral
+			# point is exact -- the old one-character reserve could not hold back a
+			# variable-length run, which is why a run split across a chunk boundary
+			# came out as two delimiters instead of one.
+			# LastEnd is the end of the last match that does NOT reach the buffer
+			# end. // scans left to right, so the final assignment wins. A match
+			# touching the end may still be growing and is held for the next read;
+			# no match at all leaves LastEnd 0, so nothing is consumed and the
+			# buffer simply grows. This replaces the old one-character reserve,
+			# which could not hold back a variable-length run -- that is why a run
+			# split across a chunk boundary came out as two delimiters.
+			# With specs: the compiled expansion returns the single chosen match as
+			# begin, one-past-end, length. Only that match is swapped, and only up
+			# to it is consumed, so the caller's selection governs each pass. It is
+			# deferred if it reaches the buffer end, the same rule as the bulk path.
+			# Without specs: SelExpr is empty and the bulk path swaps every match in
+			# the span at once.
+			SelInfo=( ${SelExpr:+${=${(e)SelExpr}}} )
+			LastEnd=0
+			[[ -n $SelExpr ]] && { : ${SelInfo:+${${${:-$(( ${SelInfo[2]} <= ${#BuffStr} ))}:#0}:+${LastEnd::=$(( ${SelInfo[2]} - 1 ))}}} } || { : ${BuffStr//(#m)(${~AllDelimPat})/${${${:-$(( MEND < ${#BuffStr} ))}:#0}:+${LastEnd::=$MEND}}} }
+			Head=${BuffStr[1,$LastEnd]}
+			print -rn "${(@)PrintOpts}" -- ${Head:+${Head//(#m)(${~AllDelimPat})/${MATCH:+${${OutDelims[${DelimGroup[(k)$MATCH]}]}//\{\{\}\}/$MATCH}}}}
 			BuffStr=${BuffStr[$(( ${#Head} + 1 )),-1]}
-			print -rn -- ${BuffStr[1,-$((BufferSize+1))]}
+			# over the cap: this portion is forced out, so nothing can be held back
+			# for it either -- it is swapped with the same no-reserve pass the
+			# terminal drain uses, rather than going out raw. A match straddling the
+			# cap boundary is still split, which is unavoidable once the buffer has
+			# to be released.
+			Over=${BuffStr[1,-$((BufferSize+1))]}
+			print -rn "${(@)PrintOpts}" -- ${Over:+${Over//(#m)(${~AllDelimPat})/${MATCH:+${${OutDelims[${DelimGroup[(k)$MATCH]}]}//\{\{\}\}/$MATCH}}}}
 			BuffStr=${BuffStr[-$BufferSize,-1]}
 		}
-		print -r -- $BuffStr
+		# terminal drain: nothing more can arrive, so the one-character reserve
+		# is dropped and the WHOLE remainder is swapped in the same single pass.
+		: ${${(k)StarDelims[(K)$BuffStr]}:+${BuffStr::=${BuffStr//(#m)(${~AllDelimPat})/${MATCH:+${${OutDelims[${DelimGroup[(k)$MATCH]}]}//\{\{\}\}/$MATCH}}}}}
+		print -r "${(@)PrintOpts}" -- $BuffStr
 	} always { (( VerboseFD > 2 )) && { exec {VerboseFD}>&- } }
 	return 0
 }
-print -r -- '# basic swap and delimiter split across chunks'
-print -rn -- 'oneENDtwoENDthree' | @read -CS 5 END ' | '
-
-print -r -- '# two delimiter groups, small chunks'
-print -rn -- 'xAAyCCzBBw' | @read AA BB '|' , CC '_'
-
-print -r -- '# one chunk: the default G span consumes through BB, foreign CC prints raw'
-print -rn -- 'xAAyCCzBBw' | @read -CS 32 AA BB '|' , CC '_'
-
-print -r -- '# user logic reads the tables: longest match by value reverse-lookup'
-print -rn -- 'xxabcyy' | @read ab abc '<>' -- '${MatchIds:+${DelimPat::=${InDelims[${(k)Lens[(r)${${(@On)${(@v)Lens}}[1]}]}]}}}'
-
-print -r -- '# serial user logic: the second entry vetoes the first'
-print -rn -- 'xxabyy' | @read ab abc '<>' -- '${MatchIds:+${DelimPat::=${InDelims[${(k)Lens[(r)${${(@On)${(@v)Lens}}[1]}]}]}}}' '${MatchIds:+${${${:-$(( ${${(@On)${(@v)Lens}}[1]} < 3 ))}:#0}:+${DelimPat::=}}}'
-
-print -r -- '# conventional REPLY name still honored'
-print -rn -- 'aENDb' | @read END '|' -- '${${REPLY::=END}:+}'
-
-print -r -- '# user logic overrides the group choice outright'
-print -rn -- 'xAAyCCzw' | @read -CS 32 AA '|' , CC '_' -- '${${DelimPat::=CC}:+}'
-
-print -r -- '# newline to space'
-print -l -- one two three | @read $'\n' ' '
-
-print -r -- '# EOF counts as an empty read (verbose to fd 2)'
-print -rn -- 'aENDb' | @read -v 2 -ER 2 END '|'
-
-print -r -- '# trailing delimiter is deferred, never consumed early'
-print -rn -- 'xENDyEND' | @read END '|'
-
-print -r -- '# stalled producer trips the sign-bit kill-switch (verbose to fd 3, routed to stderr)'
-{ print -rn -- 'aaa'; sleep 3 } | @read -v 3 -T 0.2 -ER 3 END ' ' 3>&2
-
-print -r -- '# BufferSize caps an unbroken stream'
-print -rn -- 'abcdefghijklmnopqrstuvwxyz' | @read -CS 8 -BS 10 Q ' '
-
-print -r -- '# pattern delimiter from the proof of concept'
-print -rn -- ' 9630 print 1' | @read -CS 16 '([^0-9][^0-9]#)' '<>'
-
-print -r -- '# chunk boundary can split a variable-length pattern run: tune ChunkSize'
-print -rn -- ' 9630 print 1' | @read -CS 8 '([^0-9][^0-9]#)' '<>'
-
-print -r -- '# anchored pattern with an empty match defers instead of looping'
-print -rn -- 'abc' | @read '(#s)[0-9]#' '<'
-
-print -r -- '# flag=val tokens: whitespace and empty args survive the split'
-print -rn -- 'oneENDtwoENDthree' | @read -CS=5 --Timeout=0.4 END ' | '
-
-print -r -- '# three spans pending in the last chunk resolve during the EOF drain'
-print -rn -- 'aXbXcXd' | @read -CS 32 X '-'
-
-## the selector chain standalone, against fake match tables: the SAME entry
-## text @read stores as its default UserLogic, run the same way, so a range
-## slice (2,4) is on record picking a value-class range, not a single element.
-function rig {
-	emulate -L zsh; setopt extendedglob typesetsilent
-	local -A Starts=( M1 1 M2 1 M3 4 M4 5 ) Ends=( M1 3 M2 6 M3 4 M4 6 ) Lens=( M1 3 M2 6 M3 1 M4 2 )
-	local -A Vals=( M1 32 M2 6 M3 31 M4 123 )
-	local -A TableByLetter=( S Starts L Lens E Ends V Vals )
-	local -a MatchIds=( M1 M2 M3 M4 ) PVals=() MVals=() MIds=() Choices=( "$@" )
-	local -aU __MatchIds=( "${(@)MatchIds}" )
-	local Mode='G' ArrName='' Slice='' SliceA='' SliceB=''
-	local Chain='${MatchIds:+${(F)${(@)Choices//(#m)*/${${(M)MATCH:#[GM]}:+Mode ${Mode::=$MATCH}}${${MATCH:#[GM]}:+\tArrName ${ArrName::=${TableByLetter[${(U)MATCH[1]}]}}\tSlice ${Slice::=${${MATCH[3,-1]}:-1}}${${SliceA::=${Slice%%,*}}:+}${${SliceB::=${Slice#*,}}:+}\tPVals ${(A)PVals::=${(Au-)${(@)__MatchIds//(#m)*/${${(P)ArrName}[$MATCH]}}}}\tMVals ${(A)MVals::=${(Au)${(@)PVals[${SliceA},${SliceB}]}}}\tMIds ${(A)MIds::=${(@k)${(P)ArrName}[(R)(${(j.|.)MVals})]}}\t__MatchIds ${(A)__MatchIds::=${(@)__MatchIds:*MIds}}}}}}'
-	: ${(e)Chain}
-	print -r -- "${(r.16.)${(j:,:)argv}} -> ( ${(j: :)__MatchIds} )"
-}
-
-rig S:1 L:-1
-rig E:-1
-rig E:-1 L:-1
-rig V:-1
-rig L:2,4
-rig S:1
-# basic swap and delimiter split across chunks
-one | two | three
-# two delimiter groups, small chunks
-x|y_z|w
-# one chunk: the default G span consumes through BB, foreign CC prints raw
-x|yCCz|w
-# user logic reads the tables: longest match by value reverse-lookup
-xx<>yy
-# serial user logic: the second entry vetoes the first
-xxabyy
-# conventional REPLY name still honored
-a|b
-# user logic overrides the group choice outright
-xAAy_zw
-# newline to space
-one two three
-
-# EOF counts as an empty read (verbose to fd 2)
-BytesRead: 5	TO: 0.40000000000000002	Hist: 000000000000000000000000000000000000000000000000000000000000000	Return: 0 - At least one byte of data was successfully read and, if appropriate, written.
-	ArrName Starts	Slice 1	PVals 2	MVals 2	MIds M1	__MatchIds M1
-	ArrName Lens	Slice -1	PVals 3	MVals 3	MIds M1	__MatchIds M1
-a|BytesRead: 0	TO: 0.40000000000000002	Hist: 000000000000000000000000000000000000000000000000000000000000000	Return: 5 - No system error occurred, but zero bytes were read.  This usually indicates end of file.  The parameters are set according to the usual rules; no write to outfd is attempted.
-BytesRead: 0	TO: 0.25922851304987854	Hist: 010000000000000000000000000000000000000000000000000000000000001	Return: 5 - No system error occurred, but zero bytes were read.  This usually indicates end of file.  The parameters are set according to the usual rules; no write to outfd is attempted.
-BytesRead: 0	TO: 0.17066380005374901	Hist: 110000000000000000000000000000000000000000000000000000000000011	Return: 5 - No system error occurred, but zero bytes were read.  This usually indicates end of file.  The parameters are set according to the usual rules; no write to outfd is attempted.
-b
-# trailing delimiter is deferred, never consumed early
-x|yEND
-# stalled producer trips the sign-bit kill-switch (verbose to fd 3, routed to stderr)
-BytesRead: 3	TO: 0.20000000000000001	Hist: 000000000000000000000000000000000000000000000000000000000000000	Return: 0 - At least one byte of data was successfully read and, if appropriate, written.
-BytesRead: 0	TO: 0.20000000000000001	Hist: 000000000000000000000000000000000000000000000000000000000000000	Return: 4 - The attempt to read timed out.  Note this does not set ERRNO as this is not a system error.
-BytesRead: 0	TO: 0.11956702964788249	Hist: 001000000000000000000000000000000000000000000000000000000000001	Return: 4 - The attempt to read timed out.  Note this does not set ERRNO as this is not a system error.
-BytesRead: 0	TO: 0.072241051378128127	Hist: 011000000000000000000000000000000000000000000000000000000000011	Return: 4 - The attempt to read timed out.  Note this does not set ERRNO as this is not a system error.
-BytesRead: 0	TO: 0.044100000000000007	Hist: 111000000000000000000000000000000000000000000000000000000000111	Return: 4 - The attempt to read timed out.  Note this does not set ERRNO as this is not a system error.
-aaa
-# BufferSize caps an unbroken stream
-abcdefghijklmnopqrstuvwxyz
-# pattern delimiter from the proof of concept
-<>9630<>1
-# chunk boundary can split a variable-length pattern run: tune ChunkSize
-<>9630<><>1
-# anchored pattern with an empty match defers instead of looping
-abc
-# flag=val tokens: whitespace and empty args survive the split
-one | two | three
-# three spans pending in the last chunk resolve during the EOF drain
-a-b-c-d
-S:1,L:-1         -> ( M2 )
-E:-1             -> ( M2 M4 )
-E:-1,L:-1        -> ( M2 )
-V:-1             -> ( M4 )
-L:2,4            -> ( M1 M2 M4 )
-S:1              -> ( M1 M2 )
-
-
-: <<-"OLDVERSION"
-function @read { 
-	emulate -L zsh; setopt extendedglob typesetsilent
-	if ! [[ -p /dev/stdin ]] { return 1 } 
- 
-	@args:parse MaxEmptyReads:1 Timeout:1 OutDelimiter:+ InDelimiter:+
-	set -- "${(@)ParsedArgv}"
-
-	local -i MaxEmptyReads=${${MaxEmptyReads[1]}:-4}
-	local -F Timeout=${${Timeout[1]}:-0.2}
-	local InDelim="${InDelimiter:-"${argv:-"{}"}"}"
-	local OutDelim="${:-"${OutDelimiter:-"{}"}"} "
-
-	local -a Buffer=() 
- 
-	local -i ReadAttempts=${MaxEmptyReads}
-	while (( ReadAttempts )) { 
-		local Char
-		IFS= read -u 0 -t ${Timeout} -k 1 -rs Char
-
-		[[ -z $Char ]] && {
-			((ReadAttempts--))
-			continue
-		}
-
-		Buffer+=("${Char}")
-		((ReadAttempts=MaxEmptyReads))
-		local BuffStr="${(j..)Buffer}"
-		local FirstDelim=""
-
-		while [[ -n "${FirstDelim::="${(M)BuffStr#*${~InDelim}}"}" ]] {
-			BuffStr="${BuffStr#*${~InDelim}}"
-			print -nr -- "${FirstDelim/${~InDelim}/"${OutDelim}"}"
-		}
-		Buffer=(${(s..)BuffStr})
-	}
-	##common pattern i use
-	#print -nr -- ${Buffer:+"${(j..)Buffer}"$'\n'}
-	##allows print -n like in the example to prevent a new line in the output
-	print -nr -- ${Buffer:+"${(j..)Buffer}"}
-}
-
-: <<"Examples.@read"
-	() {
-		{
-		#	set -x
-			print -nl -- {} hello {} world | @read outdelimiter '<{}>'
-		} always {
-			set +x
-		}
-	}
-Examples.@read
-OLDVERSION
-
