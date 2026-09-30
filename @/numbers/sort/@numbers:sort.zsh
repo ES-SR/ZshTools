@@ -1,7 +1,7 @@
 
 function @numbers:sort {
   emulate -LR zsh -o extendedglob -o typesetsilent
-{ set -x
+{ #set -x
 
   @args:parse "(#s)-(#e)":HighToLow "(#s)+(#e)":LowToHigh "[rR]":Reverse
   set -- "${(@)PositionalArgs}"
@@ -15,8 +15,6 @@ function @numbers:sort {
     print -r -- "${(a@)argv}"
     return
   }
-
-  
 
   set -- ${argv//(#m)<->/$((MATCH))}
   local -A IdxdArgs=(${${(e):-{0..$ARGC}}:^argv})
