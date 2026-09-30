@@ -1,7 +1,8 @@
 function @whence:function {
 	emulate -LR zsh -o extendedglob -o typesetsilent
+
 { #set -x
-	__help () {
+	function __@whence:function:help {
 		print -l -- \
 			"Path: print the path to the file containing the function definition" \
 			"Display: use the bat command to display the content of the found function file" \
@@ -9,25 +10,25 @@ function @whence:function {
 			"Edit: open for editing in \$EDITOR or using the program passed as an argument after \"Edit\"" \
 			"Help: display this message"
 	}
-	__path () {
+	function __@whence:function:path {
 		print -- ${FilePath}
 	}
-	__display () {
+	function __@whence:function:display {
 		bat -pp -l zsh --theme=Monokai\ Extended\ Bright "${FilePath}"
 	}
-	__cliEdit () {
+	function __@whence:function:cliEdit {
 		print -X2 -zR "$(< "${FilePath}")"
 	}
-	__edit () {
+	function __@whence:function:edit {
 		(( ARGC )) && {
 			${1} "${FilePath}"
 		} || {
-			${EDITOR} "${FilePath}"
+			${EDITOR} "${FilePath}" &!
 		}
 	}
 
 	(( ARGC )) || {
-		__help
+		__@whence:function:help
 		return
 	}
 
@@ -41,15 +42,18 @@ function @whence:function {
 	local Cmd
 	for Cmd ( "${(@)FlagInfo}" ) {
 		Cmd=${Cmd%%:*}
-		__${(L)Cmd[1]}${Cmd[2,-1]} ${(P)Cmd}
+		__@whence:function:${(L)Cmd[1]}${Cmd[2,-1]} ${(P)Cmd}
 		CmdsExecuted+=($Cmd)
 	}
 	(( ${#CmdsExecuted} )) || {
-		__path
+		__@whence:function:path
 	}
 
 } always {
-	unfunction __help __path __display __cliEdit __edit
+	unfunction \
+		__@whence:function:help __@whence:function:path \
+		__@whence:function:display __@whence:function:cliEdit \
+		__@whence:function:edit 2>/dev/null
 	set +x
 }
 }
