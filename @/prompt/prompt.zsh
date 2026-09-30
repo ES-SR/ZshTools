@@ -1,56 +1,124 @@
+function @prompt:length {
+	emulate -LR zsh -o extendedglob -o promptsubst
 
-	function @prompt {
-		setopt promptsubst
-		emulate -L zsh; setopt extendedglob
+	local -i X Y=${(c)#argv} M
+	(( Y )) && {
+		while (( ${${(%):-${argv}%${Y}(l.1.0)}[-1]} )) {
+			(( X = Y ))
+			(( Y *= 2 ))
+		}
+		while (( Y > X + 1 )) {
+			(( M = X + ( Y - X ) / 2 ))
+			(( ${${(%):-${argv}%${M}(l.X.Y)}[-1]} = M  ))
+		}
+	}
+	print $X
+}
 
-		declare -gA PromptVars=(
-			"(#i)(K(eymap|))"					'${psvar[1]}'
-			"(#i)(H(ist(ory|)|)(Num(ber|)|))"			'${HISTNO}'
-			"(#i)(C(ur(r(ent|)|)|)(W(orking|)|)D(ir(ectory|)|))"	'%d'
-			"(#i)(T(ime|))"						'%T'
-			"(#i)(L(ast|)R(uturn|))"				'%(?..%F{red}[%?]%f)'
-			"(#i)(J(obs|))"						'%1(j.[%j].)'
-			"(#i)(N(ew|)L(ine|))"					$'\n'
-			"(#i)(I(nput|)M(arker|))"				'<<|'
-			"(#i)(F(ixed|)S(pacer|))"				''
-			"(#i)(E(xpand|)S(pacer|))"				''
-		)
+function @prompt {
+	emulate -L zsh -o extendedglob -o typesetsilent -o promptsubst
 
-		local -a DefaultSegments=( HistoryNumber NewLine InputMarker Newline )
-		local Arg Prompt
+	declare -gxA PromptVars=(
+		Dir '%d'
+		Time '%T'
+		NL $'\n'
+		Hist ''
+		Keymap ''
+		Lines 0
+	)
 
-		(( ARGC )) && {
-			for Arg ( "${(@)argv:-${DefaultSegments}}" ) {
-				local Segment="${PromptVars[(k)$Arg]}"
-				Arg="${Arg//(#s)(#i)(#b)(s(tyle|))([-_[:space:]]|)(<->|[rR])/"%{\$(@style ${match[4]})%}"}"
-				Segment="${Segment:-${Arg}}"
-				Prompt+="${Segment}"
+	local -a PromptLineVars=("${(s. , .)${(@)argv//(#m)*/"${(q)MATCH}"}}")
+	local -a PromptLines
+
+	local LineVars LineNumber=1
+	for LineVars ( "${(@)PromptLineVars}" ) {
+		local Line=""
+		local LV
+		for LV ( "${(z)LineVars}" ) {
+			[[ -v PromptVars["${LV}"] ]] && {
+				Line+=$'${'PromptVars$'['"${LV}"$']}'
+			} || {
+				Line+="${(Q)LV}"
 			}
 		}
-
-		PROMPT="${(Q)Prompt}"
-
-		function zle-keymap-select {
-			local Keymap="${KEYMAP}"
-			Keymap="${Keymap//vicmd/"%{$(@style 15)%}CMD%{$(@style r)%}"}"
-			Keymap="${Keymap//(viins|main)/"%{$(@style 14)%}INS%{$(@style r)%}"}"
-			psvar[1]="${Keymap}"
-			zle reset-prompt
-		}
-
-		function zle-line-init {
-			zle reset-prompt
-			trap 'zle reset-prompt' WINCH
-		}
-
-		function zle-history-line-set {
-			zle reset-prompt
-		}
-
-		zle -N zle-keymap-select
-		zle -N zle-line-init
-		zle -N zle-history-line-set
+		PromptVars+=( $LineNumber "${Line}" )
+		(( LineNumber++ , PromptVars[Lines]+=1 ))
 	}
 
-#@prompt S_11 \[ H \] S_r '${(l.COLUMNS-13.)}' S_12 \[ T \] S_r NL '<<' K '|' NL
+	function zle-line-init {
+		emulate -L zsh -o extendedglob -o typesetsilent -o promptsubst
 
+		@prompt:update
+	}
+
+	function zle-keymap-select {
+		local Keymap="${KEYMAP}"
+		local -A Style=(
+			COMMAND "%K{#FF0}%F{#000}"
+			INSERT "%K{#0F0}%F{#000}"
+			ERROR "%K{#F00}%F{#000}"
+		)
+
+		Keymap="${Keymap:s/vicmd/COMMAND/:s/viins/INSERT/:s/main/INSERT/}"
+
+		PromptVars[Keymap]="${Style[$Keymap]}${Keymap:-"---"}"
+		@prompt:update
+	}
+
+	function zle-history-line-set {
+		PromptVars[Hist]="${HISTNO}"
+		@prompt:update
+	}
+
+	function @prompt:update {
+		emulate -LR zsh -o extendedglob -o typesetsilent -o promptsubst
+
+		#print -u2 -Pl -- %F{red} "%Ufuncstack%u" "${(@)funcstack}" %f
+		(( $funcstack[(I)${0}] > 1 )) && { return }
+
+		local -a PromptFunctions=(
+			zle-history-line-set
+			zle-keymap-select
+		)
+		#print -u2 -Pl -- %F{red} "%UPromptFunctions%u" "${(@)PromptFunctions}" %f
+		#print -u2 -Pl -- %F{red} "%UFiltered PromptFunctions%u" "${(@)PromptFunctions:|funcstack}" %f
+
+		local PF
+		for PF ( ${PromptFunctions:|funcstack} ) {
+			$PF
+		}
+
+		local Prompt=''
+		local -i LN
+		for LN ( {1..${PromptVars[Lines]}} ) {
+			local Line="${PromptVars[${LN}]}"
+
+			local RawSpacer='{{SP}}'
+			local -a LineArr=(${(ps.$RawSpacer.)Line})
+			local -i Spacers=$(( ${#LineArr} > 1 ? ${#LineArr} - 1 : 1 ))
+			local -i SpacerSize=$COLUMNS
+			local Str
+			for Str ( "${(@)LineArr}" ) {
+				Str="${(e)Str}"
+				local -i Len=$(@prompt:length $Str)
+				(( SpacerSize -= Len ))
+			}
+			(( SpacerSize /= Spacers ))
+			local Spacer="\${(l.${SpacerSize}.)}"
+			Prompt+="${(pj.$Spacer.)LineArr}"
+			(( LN < PromptVars[Lines] )) && {
+				Prompt+=$'${'PromptVars$'['NL$']}'
+			}
+		}
+		prompt="${Prompt}"
+		zle reset-prompt
+		zle -R
+	}
+
+	zle -N zle-keymap-select
+	zle -N zle-history-line-set
+	zle -N @prompt:update
+	zle -N zle-line-init
+}
+
+@prompt '%K{#222}' '[' Hist ']' '{{SP}}' Dir '{{SP}}' '[' Time ']' '%E%k' , Keymap '{{SP}}' '%E%f%k' NL
