@@ -1,7 +1,12 @@
 function @delimiter:generate {
-        emulate -L zsh; setopt extendedglob typesetsilent
+emulate -L zsh; setopt extendedglob typesetsilent
+{
+(( Debug )) && {
+        set -x
+}
 
-        @args:parse Visible Length:1 ++:AddDelimChars:+ --:RmDelimChars:+ Delimiter:1 SafeMode:+
+        @args:parse Visible Length:1 Delimiter:1 Attempts:1 \
+                ++:AddDelimChars:+ --:RmDelimChars:+  SafeMode:+
         set -- "${(@)Argv}"
 
         local -aU DelimChars=(
@@ -39,8 +44,16 @@ function @delimiter:generate {
         }
 
         (( ${#SafeMode} )) && {
-                while [[ *${SafeMode}* = *${Delim}* ]] {
-                        Delim+=${DelimChars[$(@numbers:random:range 1,${#DelimChars} 1)]}
+                local -i A=${${Attempts[1]}:-5}
+                while [[ "${Delim}" = *${SafeMode}* || "${SafeMode}" = *${Delim}* ]] {
+                        Delim="${Delim//${SafeMode}/}"
+                        repeat $(( Len - ${(c)#Delim} )) {
+                                Delim+=${DelimChars[$(@numbers:random:range 1,${#DelimChars} 1)]}
+                        }
+                        (( Attempts-- )) || {
+                                print -u2 -P -- "%F{red}Unable to generate safe delimiter.%f"
+                                return 1
+                        }
                 }
         }
 
@@ -49,16 +62,21 @@ function @delimiter:generate {
         } || {
                 print -- "${Delim}"
         }
+} always {
+        set +x
+}
 }
 
-#:<<-"Examples.@delimiter:generate"
+:<<-"Examples.@delimiter:generate"
         @delimiter:generate
         @delimiter:generate -v
         @delimiter:generate {a..d}
-        @delimiter:generate {a..d} -l 3 -sm a
+        @delimiter:generate {a..d} -l 3 -sm a -a 1
+        @delimiter:generate {a..d} -l 3 -sm a -a 10
+        @delimiter:generate {a..d} -- {b..d} -l 3 -sm a
         @delimiter:generate {a..d} -l 13
         @delimiter:generate {a..d} -- {b..d} -l 13
         @delimiter:generate -l 13 ${(us..):-"Hello World"} -sm "Hello World"
         @delimiter:generate ${(us..):-"Hello World"} -sm "Hello World"
         @delimiter:generate ${(us..):-"Hello World"} -- elord -sm "Hello World"
-#Examples.@delimiter:generate
+Examples.@delimiter:generate
