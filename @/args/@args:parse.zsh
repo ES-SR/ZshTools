@@ -62,146 +62,145 @@ function __@args:parse {
 }
 
 function __@args:parse:bridge {
-	print -r -- 'eval "$(__@args:parse __ArgsParseArgv "${(@)argv}")"' 
+	print -r -- 'eval "$(__@args:parse __ArgsParseArgv "${(@)argv}")"'
 }
 
 alias @args:parse='local -a __ArgsParseArgv=("${(@)argv}"); . <(__@args:parse:bridge)'
 
 function @args:parse:generatePattern {
-        emulate -LR zsh -o extendedglob -o typesetsilent
+	emulate -LR zsh -o extendedglob -o typesetsilent
 
-        (( ARGC )) || return 1
-        (( ARGC == 1 )) && [[ $1 = (-|--)(#i)(h(elp|)) ]] && {
-                <<-"EOF"
-                        . the following segment is optional
-                        , the following preceding segment is an alternate
-                        / the following segment is applied to the end of each preceding segment
-                EOF
-                return
-        }     
+	(( ARGC )) || return 1
+	(( ARGC == 1 )) && [[ $1 = (-|--)(#i)(h(elp|)) ]] && {
+		<<-"EOF"
+			. the following segment is optional
+			, the following preceding segment is an alternate
+			/ the following segment is applied to the end of each preceding segment
+		EOF
+		return
+	}
 
-        local Arg
-        for Arg {                                                                             
-                # 1. Normalize camelCase into required word boundaries (FileDest -> File-Dest)
-                local SpecNorm="${Arg//(#b)([a-z0-9])([A-Z])/$match[1]-$match[2]}"
+	local Arg
+	for Arg {
+		# 1. Normalize camelCase into required word boundaries (FileDest -> File-Dest)
+		local SpecNorm="${Arg//(#b)([a-z0-9])([A-Z])/$match[1]-$match[2]}"
 
-                # 2. Split into required words on '-'
-                local -a Words=(${(s.-.)SpecNorm})
-                local -a LongWordPats=()
-                local -a ShortChars=()
+		# 2. Split into required words on '-'
+		local -a Words=(${(s.-.)SpecNorm})
+		local -a LongWordPats=()
+		local -a ShortChars=()
 
-                local Word                                                     
-                for Word ( "${(@)Words}" ) {
-                        # Short flag anchor: first letter of required word stem
-                        ShortChars+=( "${${Word/[^[:alnum:]]/}[1]}" )
+		local Word
+		for Word ( "${(@)Words}" ) {
+			# Short flag anchor: first letter of required word stem
+			ShortChars+=( "${${Word/[^[:alnum:]]/}[1]}" )
 
-                        # Split word into optional segments on '.'
-                        local -a Segs=( ${(s:.:)Word} )
-                        local -a Stems=() Slashes=() Alts=()
+			# Split word into optional segments on '.'
+			local -a Segs=( ${(s:.:)Word} )
+			local -a Stems=() Slashes=() Alts=()
 
-                        # Parse individual segment DSL structures
-                        local Seg                             
-                        for Seg ( "${(@)Segs}" ) {                     
-                                if [[ "$Seg" = *","* ]] { 
-                                        # Handle Stem,Alt1/Alt2 syntax (e.g., ector,y/ies)
-                                        local Stem="${Seg%%,*}"   
-                                        local Rest="${Seg#*,}" 
-                                        local -a AltList=(${(s./.)Rest})
-                                        Stems+=("${Stem}")    
-                                        Slashes+=("")
-                                        Alts+=("${(j.|.)AltList}")
-                                } elif [[ "${Seg}" = *"/"* ]] {
-                                        # Handle Stem/Slash syntax (e.g., Dir/s)
-                                        Stems+=("${Seg%%/*}")
-                                        Slashes+=("${Seg#*/}")
-                                        Alts+=("")
-                                } else {
-                                        Stems+=("${Seg}")                              
-                                        Slashes+=("")
-                                        Alts+=("")
-                                }                        
-                        }                                     
+			# Parse individual segment DSL structures
+			local Seg
+			for Seg ( "${(@)Segs}" ) {
+				if [[ "$Seg" = *","* ]] {
+					# Handle Stem,Alt1/Alt2 syntax (e.g., ector,y/ies)
+					local Stem="${Seg%%,*}"
+					local Rest="${Seg#*,}"
+					local -a AltList=(${(s./.)Rest})
+					Stems+=("${Stem}")
+					Slashes+=("")
+					Alts+=("${(j.|.)AltList}")
+				} elif [[ "${Seg}" = *"/"* ]] {
+					# Handle Stem/Slash syntax (e.g., Dir/s)
+					Stems+=("${Seg%%/*}")
+					Slashes+=("${Seg#*/}")
+					Alts+=("")
+				} else {
+					Stems+=("${Seg}")
+					Slashes+=("")
+					Alts+=("")
+				}
+			}
 
-                        # Pass 1: Backward propagation of slashes to preceding segments
-                        local CurrSlash=""                     
-                        local -i I                  
-                        for (( I=${#Segs}; I>=1; I-- )) {
-                                if [[ -n "${Slashes[$I]}" ]] {    
-                                        CurrSlash="${Slashes[$I]}"
-                                } elif [[ -n "${Alts[$I]}" ]] {
-                                        CurrSlash=""
-                                } else {                                     
-                                        Slashes[$I]="${CurrSlash}"
-                                }                        
-                        }                                
+			# Pass 1: Backward propagation of slashes to preceding segments
+			local CurrSlash=""
+			local -i I
+			for (( I=${#Segs}; I>=1; I-- )) {
+				if [[ -n "${Slashes[$I]}" ]] {
+					CurrSlash="${Slashes[$I]}"
+				} elif [[ -n "${Alts[$I]}" ]] {
+					CurrSlash=""
+				} else {
+					Slashes[$I]="${CurrSlash}"
+				}
+			}
 
-                        # Pass 2: Right-to-left nested group pattern assembly
-                        local WordPat=""               
-                        for (( I=${#Segs}; I>=1; I-- )) {
-                                local Stem="${Stems[$I]}"
-                                local Slash="${Slashes[$I]}"                     
-                                local Alt="${Alts[$I]}"
+			# Pass 2: Right-to-left nested group pattern assembly
+			local WordPat=""
+			for (( I=${#Segs}; I>=1; I-- )) {
+				local Stem="${Stems[$I]}"
+				local Slash="${Slashes[$I]}"
+				local Alt="${Alts[$I]}"
 
-                                local SegPat="${Stem}"  
-                                [[ -n "${Alt}" ]] && { SegPat="${Stem}(${Alt})" }
+				local SegPat="${Stem}"
+				[[ -n "${Alt}" ]] && { SegPat="${Stem}(${Alt})" }
 
-                                if (( I == ${#Segs} )) {           
-                                        if [[ -n "${Alt}" ]] {      
-                                                WordPat="${SegPat}"         
-                                        } elif [[ -n "${Slash}" ]] {
-                                                WordPat="${Stem}(${Slash}|)"
-                                        } else {
-                                                WordPat="${SegPat}"
-                                        }                                                  
-                                } else {
-                                        WordPat="${SegPat}(${Slash:+${Slash}|}${WordPat}|)"
-                                }
-                        }                           
+				if (( I == ${#Segs} )) {
+					if [[ -n "${Alt}" ]] {
+						WordPat="${SegPat}"
+					} elif [[ -n "${Slash}" ]] {
+						WordPat="${Stem}(${Slash}|)"
+					} else {
+						WordPat="${SegPat}"
+					}
+				} else {
+					WordPat="${SegPat}(${Slash:+${Slash}|}${WordPat}|)"
+				}
+			}
 
-                        LongWordPats+=("${WordPat}")
-                }
+			LongWordPats+=("${WordPat}")
+		}
 
-                # 3. Combine long forms and short forms
-                local PartJoint="([-_.]|)"
-                local LongPattern="${(pj.$PartJoint.)LongWordPats}"
-                local ShortPattern="${(pj.$PartJoint.)ShortChars}"
+		# 3. Combine long forms and short forms
+		local PartJoint="([-_.]|)"
+		local LongPattern="${(pj.$PartJoint.)LongWordPats}"
+		local ShortPattern="${(pj.$PartJoint.)ShortChars}"
 
-                local FullPattern=""
-                if ! [[ "${LongPattern}" = "${ShortPattern}" ]] {
-                        FullPattern="((-|--|)${LongPattern})|((-|--)${ShortPattern})"
-                } else {
-                        FullPattern="(-|--)${LongPattern}"
-                }
+		local FullPattern=""
+		if ! [[ "${LongPattern}" = "${ShortPattern}" ]] {
+			FullPattern="((-|--|)${LongPattern})|((-|--)${ShortPattern})"
+		} else {
+			FullPattern="(-|--)${LongPattern}"
+		}
 
-                # Wrap in Zsh string anchors, case insensitivity, and optional assignment matching
-                print -r -- "(#s)(#i)(${FullPattern})(=*|)(#e)"
-        }
+		# Wrap in Zsh string anchors, case insensitivity, and optional assignment matching
+		print -r -- "(#s)(#i)(${FullPattern})(=*|)(#e)"
+	}
 }
 
 
 : <<"Examples.@args:parse"
-        function test@args:parse:testFunction {
-                @args:parse --:NotOpts:+
-                set -- "${(@)Argv}"
+	function test@args:parse:testFunction {
+		@args:parse --:NotOpts:+
+		set -- "${(@)Argv}"
 
-        @args:parse Help Debug:1 Verbose:+ --my-spec:MySpec:3 FileDir/s.ector,y/ies:+ UnusedFlag
+		@args:parse Help Debug:1 Verbose:+ --my-spec:MySpec:3 FileDir/s.ector,y/ies:+ UnusedFlag
 
-        print -Pl -- "%UHelp%u" "${(@)Help}" \
-                "%UDebug%u" "${(@)Debug}" \
-                "%UVerbose%u" "${(@)Verbose}" \
-                "%UUnusedFlag%u" "${(@)UnusedFlag}" \
-                "%UMySpec%u" "${(@)MySpec}" \
-                "%UNotOpts%u" "${(@)NotOpts}" \
-                "%UFileDirectories%u" "${(@)FileDirectories}" \
-                "%UArgv%u" "${(@)Argv}" \
-                "%UFlagInfo%u" "${(@)FlagInfo}"
-                              
-        }                                                                                               
-        test@args:parse:testFunction \
-        one --my-spec 1 2 3 4 -h debug=hello=world --help --V "many words" before another flag \
-        FileDirs {a..d} FileDirectory fd FileDirectories {A..D} \
-        -D verbose second VerboseFlag occurance values help \
-        -- these verbose "not-opts" have other flag names" like debug mixed in"
+		print -Pl -- "%UHelp%u" "${(@)Help}" \
+			"%UDebug%u" "${(@)Debug}" \
+			"%UVerbose%u" "${(@)Verbose}" \
+			"%UUnusedFlag%u" "${(@)UnusedFlag}" \
+			"%UMySpec%u" "${(@)MySpec}" \
+			"%UNotOpts%u" "${(@)NotOpts}" \
+			"%UFileDirectories%u" "${(@)FileDirectories}" \
+			"%UArgv%u" "${(@)Argv}" \
+			"%UFlagInfo%u" "${(@)FlagInfo}"
+	}                                                                                               
+	test@args:parse:testFunction \
+		one --my-spec 1 2 3 4 -h debug=hello=world --help --V "many words" before another flag \
+		FileDirs {a..d} FileDirectory fd FileDirectories {A..D} \
+		-D verbose second VerboseFlag occurance values help \
+		-- these verbose "not-opts" have other flag names" like debug mixed in"
 Examples.@args:parse
 
 
