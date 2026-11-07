@@ -179,7 +179,7 @@ function @args:parse:generatePattern {
 }
 
 
-#: <<"Examples.@args:parse"
+: <<"Examples.@args:parse"
         function test@args:parse:testFunction {
                 @args:parse --:NotOpts:+
                 set -- "${(@)Argv}"
@@ -202,6 +202,6 @@ function @args:parse:generatePattern {
         FileDirs {a..d} FileDirectory fd FileDirectories {A..D} \
         -D verbose second VerboseFlag occurance values help \
         -- these verbose "not-opts" have other flag names" like debug mixed in"
-#Examples.@args:parse
+Examples.@args:parse
 
 
