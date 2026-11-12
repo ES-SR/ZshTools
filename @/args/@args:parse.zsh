@@ -83,7 +83,7 @@ function @args:parse:generatePattern {
 	local Arg
 	for Arg {
 		# 1. Normalize camelCase into required word boundaries (FileDest -> File-Dest)
-		local SpecNorm="${Arg//(#b)([a-z0-9])([A-Z])/$match[1]-$match[2]}"
+		local SpecNorm="${Arg//(#b)([a-z0-9])((.|)[A-Z])/$match[1]-$match[2]}"
 
 		# 2. Split into required words on '-'
 		local -a Words=(${(s.-.)SpecNorm})
@@ -156,6 +156,10 @@ function @args:parse:generatePattern {
 				} else {
 					WordPat="${SegPat}(${Slash:+${Slash}|}${WordPat}|)"
 				}
+			}
+
+			if [[ "${Word[1]}" = "." ]] {
+				WordPat="(${WordPat}|)"
 			}
 
 			LongWordPats+=("${WordPat}")
