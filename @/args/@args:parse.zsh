@@ -1,6 +1,5 @@
 function __@args:parse {
 	emulate -LR zsh -o extendedglob -o typesetsilent
-	{ # set -x
         
 	local -a Specs=("${(@)argv[2,-1]}") FlagNames FlagMaxExtracts FlagPatterns
 	local Spec
@@ -21,10 +20,15 @@ function __@args:parse {
 		FlagNames+=("${Name}")
 		FlagPatterns+=("${Pattern}")
 		FlagMaxExtracts+=(${MaxExtracts})
-
-		local -a "${Name}"
+		[[ ${(tP)Name} = (*|)tag(*|) ]] && {
+			local -a PrevVals=(${"${(@P)Name}":-})
+			local -at "${Name}"
+			set -A "${Name}" "${(@)PrevVals}"
+		} || {
+			local -a "${Name}"
+		}
 		(( ${MaxExtracts/+/1} )) || {
-			set -A "${Name}" 0
+			set -A "${Name}" "${${(P)Name}:-0}"
 		}
 	}
 
@@ -33,7 +37,8 @@ function __@args:parse {
 	local MetaPat="${(j.|.)FlagPatterns}"
 
 	local -i Idx
-	local -a Argv FlagInfo=(${"${(@)FlagInfo}":-})
+	local -a PrevFlagInfo=(${"${(@)FlagInfo}":-})
+	local -a Argv FlagInfo
 	while (( ${Idx::=${argv[(I)${~MetaPat}]}} )) {
 		argv[$Idx]=("${${argv[$Idx]}%%=*}" ${"${${(M)${argv[$Idx]}%%=*}#=}":-})
 		local RawFlag="${argv[$Idx]}"
@@ -41,7 +46,7 @@ function __@args:parse {
 		local FlagName="${FlagNames[$FNIdx]}"
 		local MaxExtract="${${FlagMaxExtracts[$FNIdx]}/+/${ARGC}}"
 		set -A FlagInfo "${FlagName}:${Idx}:${RawFlag}" "${(@)FlagInfo}"
-		set -A "${FlagName}" "${(@)argv[$((Idx+1)),$((Idx + MaxExtract))]}" "${(@P)FlagName}"
+		set -A "${FlagName}" "${(@P)FlagName}" "${(@)argv[$((Idx+1)),$((Idx + MaxExtract))]}" 
 		(( MaxExtract )) || {
 			set -A "${FlagName}" $(( "${(P)FlagName:-0}" + 1 ))
 		}
@@ -50,21 +55,14 @@ function __@args:parse {
 	}
 
 	set -A Argv "${(@)argv}" "${(@)Argv}"
+	set -A FlagInfo "${(@)PrevFlagInfo}" ${(@)PrevFlagInfo:+;;} "${(@)FlagInfo}"
 
 	local FN
 	for FN ($FlagNames Argv FlagInfo) {
 		typeset -p1 -- ${FN}
 	}
-
-	} always {
-		set +x
-	}
 }
-
-function __@args:parse:bridge {
-	print -r -- 'eval "$(__@args:parse __ArgsParseArgv "${(@)argv}")"'
-}
-
+function __@args:parse:bridge { print -r -- 'eval "$(__@args:parse __ArgsParseArgv "${(@)argv}")"' }
 alias @args:parse='local -a __ArgsParseArgv=("${(@)argv}"); . <(__@args:parse:bridge)'
 
 function @args:parse:generatePattern {
@@ -84,7 +82,6 @@ function @args:parse:generatePattern {
 	for Arg {
 		# 1. Normalize camelCase into required word boundaries (FileDest -> File-Dest)
 		local SpecNorm="${Arg//(#b)([a-z0-9])((.|)[A-Z])/$match[1]-$match[2]}"
-
 		# 2. Split into required words on '-'
 		local -a Words=(${(s.-.)SpecNorm})
 		local -a LongWordPats=()
@@ -94,11 +91,9 @@ function @args:parse:generatePattern {
 		for Word ( "${(@)Words}" ) {
 			# Short flag anchor: first letter of required word stem
 			ShortChars+=( "${${Word/[^[:alnum:]]/}[1]}" )
-
 			# Split word into optional segments on '.'
 			local -a Segs=( ${(s:.:)Word} )
 			local -a Stems=() Slashes=() Alts=()
-
 			# Parse individual segment DSL structures
 			local Seg
 			for Seg ( "${(@)Segs}" ) {
@@ -121,7 +116,6 @@ function @args:parse:generatePattern {
 					Alts+=("")
 				}
 			}
-
 			# Pass 1: Backward propagation of slashes to preceding segments
 			local CurrSlash=""
 			local -i I
@@ -134,7 +128,6 @@ function @args:parse:generatePattern {
 					Slashes[$I]="${CurrSlash}"
 				}
 			}
-
 			# Pass 2: Right-to-left nested group pattern assembly
 			local WordPat=""
 			for (( I=${#Segs}; I>=1; I-- )) {
@@ -161,10 +154,8 @@ function @args:parse:generatePattern {
 			if [[ "${Word[1]}" = "." ]] {
 				WordPat="(${WordPat}|)"
 			}
-
 			LongWordPats+=("${WordPat}")
 		}
-
 		# 3. Combine long forms and short forms
 		local PartJoint="([-_.]|)"
 		local LongPattern="${(pj.$PartJoint.)LongWordPats}"
@@ -176,35 +167,7 @@ function @args:parse:generatePattern {
 		} else {
 			FullPattern="(-|--)${LongPattern}"
 		}
-
 		# Wrap in Zsh string anchors, case insensitivity, and optional assignment matching
 		print -r -- "(#s)(#i)(${FullPattern})(=*|)(#e)"
 	}
 }
-
-
-: <<"Examples.@args:parse"
-	function test@args:parse:testFunction {
-		@args:parse --:NotOpts:+
-		set -- "${(@)Argv}"
-
-		@args:parse Help Debug:1 Verbose:+ --my-spec:MySpec:3 FileDir/s.ector,y/ies:+ UnusedFlag
-
-		print -Pl -- "%UHelp%u" "${(@)Help}" \
-			"%UDebug%u" "${(@)Debug}" \
-			"%UVerbose%u" "${(@)Verbose}" \
-			"%UUnusedFlag%u" "${(@)UnusedFlag}" \
-			"%UMySpec%u" "${(@)MySpec}" \
-			"%UNotOpts%u" "${(@)NotOpts}" \
-			"%UFileDirectories%u" "${(@)FileDirectories}" \
-			"%UArgv%u" "${(@)Argv}" \
-			"%UFlagInfo%u" "${(@)FlagInfo}"
-	}                                                                                               
-	test@args:parse:testFunction \
-		one --my-spec 1 2 3 4 -h debug=hello=world --help --V "many words" before another flag \
-		FileDirs {a..d} FileDirectory fd FileDirectories {A..D} \
-		-D verbose second VerboseFlag occurance values help \
-		-- these verbose "not-opts" have other flag names" like debug mixed in"
-Examples.@args:parse
-
-
