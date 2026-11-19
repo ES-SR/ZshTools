@@ -1,6 +1,6 @@
 
 function @NULLCMD {
-	emulate -L zsh; @debug:init; options[extendedglob]=on
+	emulate -LR zsh -o extendedglob -o typesetsilent
 
 	(( ${+NULLCMDS} + ${+NullCmds} < 2 )) && {
 		if (( ${+NULLCMDS} )) {
