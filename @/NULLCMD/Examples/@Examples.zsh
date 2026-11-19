@@ -2,7 +2,7 @@
 
 function @Examples {
 {
-	emulate -L zsh; @debug:init
+	emulate -LR zsh
 
 	print -Pnu2 %F{cyan}%K{black}
 	print -lu2 $funcstack
