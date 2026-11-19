@@ -1,6 +1,6 @@
 
 
-function @Examples {
+function @examples {
 {
 	emulate -LR zsh
 
@@ -36,4 +36,4 @@ function @Examples {
 	}
 }
 
-NullCmds+=( @Examples )
+NullCmds+=( @examples )
